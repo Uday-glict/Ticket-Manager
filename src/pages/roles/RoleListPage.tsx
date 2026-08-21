@@ -94,7 +94,7 @@ export default function RoleListPage() {
 
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
         {roles.length === 0 ? (
-          <EmptyState message="No roles found" />
+          <EmptyState title="No roles found" description="Create your first role to get started." />
         ) : (
           <Table columns={columns} data={roles} emptyMessage="No roles found" />
         )}

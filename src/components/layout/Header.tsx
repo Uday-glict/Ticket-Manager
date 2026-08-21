@@ -17,7 +17,7 @@ export function Header({ userName = 'User', onLogout, className }: HeaderProps) 
   return (
     <header className={`flex items-center justify-between px-6 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 ${className}`}>
       <div className="flex-1 max-w-md">
-        <SearchBox placeholder="Search projects, tasks..." onChange={() => {}} />
+        <SearchBox value="" placeholder="Search projects, tasks..." onChange={() => {}} />
       </div>
       <div className="flex items-center gap-4">
         <button

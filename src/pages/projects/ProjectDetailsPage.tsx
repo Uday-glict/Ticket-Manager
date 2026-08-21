@@ -450,8 +450,7 @@ function MembersTab({ project }: { project: NonNullable<ReturnType<typeof mockPr
 
 function ActivityTab({ project }: { project: NonNullable<ReturnType<typeof mockProjects.find>> }) {
   const projectActivities = mockActivities.filter(a => {
-    return project.tasks?.some?.((t: any) => t.id === a.entityId) ||
-      mockTasks.some(t => t.projectId === project.id && t.id === a.entityId);
+    return mockTasks.some(t => t.projectId === project.id && t.id === a.entityId);
   });
 
   const sortedActivities = [...projectActivities].sort(

@@ -121,7 +121,7 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
             onChange={e => setStatus(e.target.value as 'active' | 'inactive')}
             options={[
               { value: 'active', label: 'Active' },
-              { value: 'inactive', label: 'Inactive' />
+              { value: 'inactive', label: 'Inactive' },
             ]}
           />
         </div>
