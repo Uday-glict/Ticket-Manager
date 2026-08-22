@@ -1,39 +1,80 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User, Role } from '../types';
-import { mockUsers, mockRoles } from '../utils/mockData';
+import { authService } from '../services/authService';
 
 interface AuthContextType {
   user: User | null;
   role: Role | null;
   login: (email: string, password: string) => Promise<boolean>;
+  signup: (email: string, password: string, name: string, workspaceName?: string) => Promise<boolean>;
   logout: () => void;
   isAuthenticated: boolean;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(mockUsers[0]); // Default logged in as admin
-  const [role, setRole] = useState<Role | null>(mockRoles[0]);
+  const [user, setUser] = useState<User | null>(null);
+  const [role, setRole] = useState<Role | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const login = async (email: string, _password: string) => {
-    const found = mockUsers.find(u => u.email === email);
-    if (found) {
-      setUser(found);
-      setRole(mockRoles.find(r => r.name === 'Admin') || mockRoles[0]);
-      return true;
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      authService.getMe()
+        .then((res) => {
+          setUser(res.data);
+          setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [] });
+        })
+        .catch(() => {
+          localStorage.clear();
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
     }
-    return false;
+  }, []);
+
+  const login = async (email: string, password: string) => {
+    try {
+      const res = await authService.login(email, password);
+      localStorage.setItem('access_token', res.data.access_token);
+      localStorage.setItem('refresh_token', res.data.refresh_token);
+      setUser(res.data.user);
+      setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [] });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const signup = async (email: string, password: string, name: string, workspaceName?: string) => {
+    try {
+      const res = await authService.signup({ email, password, name, workspace_name: workspaceName });
+      localStorage.setItem('access_token', res.data.access_token);
+      localStorage.setItem('refresh_token', res.data.refresh_token);
+      setUser(res.data.user);
+      setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [] });
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const logout = () => {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (refreshToken) {
+      authService.logout(refreshToken).catch(() => {});
+    }
+    localStorage.clear();
     setUser(null);
     setRole(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, login, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, role, login, signup, logout, isAuthenticated: !!user, loading }}>
       {children}
     </AuthContext.Provider>
   );
