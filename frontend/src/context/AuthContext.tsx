@@ -25,8 +25,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       authService.getMe()
         .then((res) => {
-          setUser(res.data);
-          setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [] });
+          const u = res.data;
+          setUser({ id: u.id, name: u.name, email: u.email, avatar: u.avatar, status: u.status, createdAt: new Date().toISOString() });
+          setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [], isSystem: true, createdAt: new Date().toISOString() });
         })
         .catch(() => {
           localStorage.clear();
@@ -42,8 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authService.login(email, password);
       localStorage.setItem('access_token', res.data.access_token);
       localStorage.setItem('refresh_token', res.data.refresh_token);
-      setUser(res.data.user);
-      setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [] });
+      const u = res.data.user;
+      setUser({ id: u.id, name: u.name, email: u.email, avatar: u.avatar, status: u.status, createdAt: new Date().toISOString() });
+      setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [], isSystem: true, createdAt: new Date().toISOString() });
       return true;
     } catch {
       return false;
@@ -55,8 +57,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await authService.signup({ email, password, name, workspace_name: workspaceName });
       localStorage.setItem('access_token', res.data.access_token);
       localStorage.setItem('refresh_token', res.data.refresh_token);
-      setUser(res.data.user);
-      setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [] });
+      const u = res.data.user;
+      setUser({ id: u.id, name: u.name, email: u.email, avatar: u.avatar, status: u.status, createdAt: new Date().toISOString() });
+      setRole({ id: '1', name: 'Admin', description: 'Full access', permissions: [], isSystem: true, createdAt: new Date().toISOString() });
       return true;
     } catch {
       return false;
