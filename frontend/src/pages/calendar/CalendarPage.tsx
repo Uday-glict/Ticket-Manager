@@ -54,6 +54,9 @@ export default function CalendarPage() {
   const startDay = monthStart.getDay();
   const daysInMonth = monthEnd.getDate();
 
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
   const days = Array.from({ length: daysInMonth }, (_, i) => {
     const d = new Date(currentDate.getFullYear(), currentDate.getMonth(), i + 1);
     const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -91,7 +94,7 @@ export default function CalendarPage() {
             {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => <div key={d} className="bg-slate-50 dark:bg-slate-800 p-2 text-center text-xs font-semibold text-slate-500">{d}</div>)}
             {Array.from({ length: startDay }).map((_, i) => <div key={`empty-${i}`} className="bg-white dark:bg-slate-900 h-24" />)}
             {days.map(({ date, iso, dayEvents }) => (
-              <div key={iso} className={`bg-white dark:bg-slate-900 h-24 p-1 overflow-hidden ${iso === new Date().toISOString().slice(0, 10) ? 'ring-1 ring-primary-400' : ''}`}>
+              <div key={iso} className={`bg-white dark:bg-slate-900 h-24 p-1 overflow-hidden ${iso === todayIso ? 'ring-1 ring-primary-400' : ''}`}>
                 <div className="text-xs font-medium text-slate-700 dark:text-slate-300">{date.getDate()}</div>
                 <div className="space-y-1 mt-1">
                   {dayEvents.slice(0, 3).map(ev => (
