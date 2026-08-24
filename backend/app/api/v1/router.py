@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, users, roles, permissions, projects, project_members, project_statuses, tasks, comments, board, dashboard, audit_logs
+from app.api.v1 import auth, users, roles, permissions, projects, project_members, project_statuses, tasks, comments, board, dashboard, audit_logs, teams, sprints, calendar
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
@@ -14,3 +14,8 @@ api_router.include_router(comments.router)
 api_router.include_router(board.router)
 api_router.include_router(dashboard.router)
 api_router.include_router(audit_logs.router)
+api_router.include_router(teams.router)
+api_router.include_router(teams.team_router)
+api_router.include_router(sprints.router)
+api_router.include_router(sprints.sprint_router)
+api_router.include_router(calendar.router)
