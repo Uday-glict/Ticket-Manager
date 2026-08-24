@@ -1,19 +1,34 @@
 from datetime import timedelta
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError, InvalidHashError
 from app.core.config import settings
 from app.utils.datetime import utcnow
 import hashlib
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+ph = PasswordHasher(
+    time_cost=3,
+    memory_cost=65536,
+    parallelism=4,
+    hash_len=32,
+    salt_len=16,
+)
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    return ph.hash(password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    try:
+        ph.verify(hashed_password, plain_password)
+        return True
+    except (VerifyMismatchError, InvalidHashError):
+        return False
+
+
+def needs_rehash(password_hash: str) -> bool:
+    return ph.check_needs_rehash(password_hash)
 
 
 def create_access_token(data: dict) -> str:

@@ -35,11 +35,11 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const success = await login(email, password);
-      if (success) {
+      const result = await login(email, password);
+      if (result.success) {
         navigate('/dashboard');
       } else {
-        setErrors({ auth: 'Invalid email or password' });
+        setErrors({ auth: result.message || 'Login failed.' });
       }
     } finally {
       setLoading(false);
@@ -126,3 +126,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

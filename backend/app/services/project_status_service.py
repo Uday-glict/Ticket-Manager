@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.project_status_repository import ProjectStatusRepository
 from app.core.exceptions import NotFoundException
+from app.constants.messages import PROJECT_STATUS_MESSAGES
+from app.constants.error_codes import PROJECT_STATUS_NOT_FOUND
 
 
 class ProjectStatusService:
@@ -20,7 +22,7 @@ class ProjectStatusService:
     async def update_status(self, status_id, **kwargs):
         status = await self.status_repo.update(status_id, **kwargs)
         if not status:
-            raise NotFoundException("Status")
+            raise NotFoundException(PROJECT_STATUS_MESSAGES["NOT_FOUND"], code=PROJECT_STATUS_NOT_FOUND)
         return status
 
     async def delete_status(self, status_id):

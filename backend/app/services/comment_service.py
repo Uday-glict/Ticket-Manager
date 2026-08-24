@@ -1,6 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.comment_repository import CommentRepository
 from app.core.exceptions import NotFoundException, ForbiddenException
+from app.constants.messages import COMMENT_MESSAGES
+from app.constants.error_codes import COMMENT_NOT_FOUND, COMMENT_FORBIDDEN
 from uuid import UUID
 
 
@@ -18,15 +20,15 @@ class CommentService:
     async def update_comment(self, comment_id: UUID, user_id: UUID, content: str):
         comment = await self.comment_repo.get_by_id(comment_id)
         if not comment:
-            raise NotFoundException("Comment")
+            raise NotFoundException(COMMENT_MESSAGES["NOT_FOUND"], code=COMMENT_NOT_FOUND)
         if comment.user_id != user_id:
-            raise ForbiddenException("Can only edit your own comments")
+            raise ForbiddenException(COMMENT_MESSAGES["FORBIDDEN"], code=COMMENT_FORBIDDEN)
         return await self.comment_repo.update(comment_id, content)
 
     async def delete_comment(self, comment_id: UUID, user_id: UUID):
         comment = await self.comment_repo.get_by_id(comment_id)
         if not comment:
-            raise NotFoundException("Comment")
+            raise NotFoundException(COMMENT_MESSAGES["NOT_FOUND"], code=COMMENT_NOT_FOUND)
         if comment.user_id != user_id:
-            raise ForbiddenException("Can only delete your own comments")
+            raise ForbiddenException(COMMENT_MESSAGES["FORBIDDEN"], code=COMMENT_FORBIDDEN)
         return await self.comment_repo.soft_delete(comment_id)

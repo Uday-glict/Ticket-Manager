@@ -18,3 +18,5 @@ class Project(Base, UUIDMixin, TimestampMixin):
     members = relationship("ProjectMember", back_populates="project")
     statuses = relationship("ProjectStatus", back_populates="project", order_by="ProjectStatus.display_order")
     tasks = relationship("Task", back_populates="project")
+    teams = relationship("Team", back_populates="project", cascade="all, delete-orphan")
+    sprints = relationship("Sprint", back_populates="project", cascade="all, delete-orphan")

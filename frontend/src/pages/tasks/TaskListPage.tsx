@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus } from 'lucide-react';
-import { mockTasks, mockProjects, mockUsers } from '../../utils/mockData';
-import type { Priority } from '../../types';
+import { taskService } from '../../services/taskService';
+import { projectService } from '../../services/projectService';
+import { userService } from '../../services/userService';
+import type { Priority, Task, Project, User } from '../../types';
+import { mapProject, mapUser, mapTask } from '../../utils/mappers';
 import { Table, type Column } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -50,27 +53,42 @@ export default function TaskListPage() {
   const [sortKey, setSortKey] = useState<string>('updatedAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
-  const getProject = (projectId: string) => mockProjects.find(p => p.id === projectId);
-  const getUser = (userId: string) => mockUsers.find(u => u.id === userId);
+  useEffect(() => {
+    Promise.all([
+      taskService.list(),
+      projectService.list(),
+      userService.list(),
+    ]).then(([tasksRes, projectsRes, usersRes]) => {
+      setTasks((tasksRes.data.data || tasksRes.data || []).map(mapTask));
+      setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
+      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
+    }).catch(() => {});
+  }, []);
+
+  const getProject = (projectId: string) => projects.find(p => p.id === projectId);
+  const getUser = (userId: string) => users.find(u => u.id === userId);
 
   const filteredTasks = useMemo(() => {
-    let tasks = [...mockTasks];
+    let result = [...tasks];
 
     if (search) {
-      tasks = tasks.filter(t => t.title.toLowerCase().includes(search.toLowerCase()));
+      result = result.filter(t => t.title.toLowerCase().includes(search.toLowerCase()));
     }
 
     if (filterValues.project) {
-      tasks = tasks.filter(t => t.projectId === filterValues.project);
+      result = result.filter(t => t.projectId === filterValues.project);
     }
 
     if (filterValues.assignedTo) {
-      tasks = tasks.filter(t => t.assignedTo === filterValues.assignedTo);
+      result = result.filter(t => t.assignedTo === filterValues.assignedTo);
     }
 
     if (filterValues.status) {
-      tasks = tasks.filter(t => {
+      result = result.filter(t => {
         const project = getProject(t.projectId);
         const status = project?.statuses.find(s => s.id === t.statusId);
         return status?.name === filterValues.status;
@@ -78,10 +96,10 @@ export default function TaskListPage() {
     }
 
     if (filterValues.priority) {
-      tasks = tasks.filter(t => t.priority === filterValues.priority);
+      result = result.filter(t => t.priority === filterValues.priority);
     }
 
-    tasks.sort((a, b) => {
+    result.sort((a, b) => {
       let aVal = a[sortKey as keyof typeof a] ?? '';
       let bVal = b[sortKey as keyof typeof b] ?? '';
       if (typeof aVal === 'string') aVal = aVal.toLowerCase();
@@ -91,8 +109,8 @@ export default function TaskListPage() {
       return 0;
     });
 
-    return tasks;
-  }, [search, filterValues, sortKey, sortDirection]);
+    return result;
+  }, [search, filterValues, sortKey, sortDirection, tasks, projects, users]);
 
   const totalPages = Math.ceil(filteredTasks.length / ITEMS_PER_PAGE);
   const paginatedTasks = filteredTasks.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -101,19 +119,19 @@ export default function TaskListPage() {
     {
       key: 'project',
       label: 'Project',
-      options: mockProjects.map(p => ({ value: p.id, label: p.name })),
+      options: projects.map(p => ({ value: p.id, label: p.name })),
     },
     {
       key: 'assignedTo',
       label: 'Assigned To',
-      options: mockUsers.map(u => ({ value: u.id, label: u.name })),
+      options: users.map(u => ({ value: u.id, label: u.name })),
     },
     {
       key: 'status',
       label: 'Status',
       options: [
         ...new Set(
-          mockProjects.flatMap(p =>
+          projects.flatMap(p =>
             p.statuses.filter(s => s.enabled).map(s => s.name)
           )
         ),
@@ -285,3 +303,4 @@ export default function TaskListPage() {
     </div>
   );
 }
+

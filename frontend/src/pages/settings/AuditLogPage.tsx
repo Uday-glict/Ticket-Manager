@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Shield } from 'lucide-react';
 import { SearchBox } from '../../components/common/SearchBox';
 import { FilterPanel } from '../../components/common/FilterPanel';
@@ -6,8 +6,10 @@ import { Table, type Column } from '../../components/common/Table';
 import { Pagination } from '../../components/common/Pagination';
 import { Avatar } from '../../components/common/Avatar';
 import { Badge } from '../../components/common/Badge';
-import { mockAuditLogs, mockUsers } from '../../utils/mockData';
-import type { AuditLog } from '../../types';
+import { auditService } from '../../services/auditService';
+import { userService } from '../../services/userService';
+import type { AuditLog, User } from '../../types';
+import { mapUser, mapAuditLog } from '../../utils/mappers';
 
 const PAGE_SIZE = 8;
 
@@ -56,15 +58,27 @@ export default function AuditLogPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<string>('createdAt');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
-  const userMap = useMemo(() => {
-    const m = new Map<string, typeof mockUsers[0]>();
-    mockUsers.forEach(u => m.set(u.id, u));
-    return m;
+  useEffect(() => {
+    Promise.all([
+      auditService.list(),
+      userService.list(),
+    ]).then(([logsRes, usersRes]) => {
+      setAuditLogs((logsRes.data.data || logsRes.data || []).map(mapAuditLog));
+      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
+    }).catch(() => {});
   }, []);
 
+  const userMap = useMemo(() => {
+    const m = new Map<string, User>();
+    users.forEach(u => m.set(u.id, u));
+    return m;
+  }, [users]);
+
   const filtered = useMemo(() => {
-    let logs = [...mockAuditLogs];
+    let logs = [...auditLogs];
 
     if (search) {
       const q = search.toLowerCase();
@@ -104,7 +118,7 @@ export default function AuditLogPage() {
     });
 
     return logs;
-  }, [search, filters, sortKey, sortDirection, userMap]);
+  }, [search, filters, sortKey, sortDirection, userMap, auditLogs]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
@@ -196,7 +210,7 @@ export default function AuditLogPage() {
         />
         <FilterPanel
           filters={[
-            { key: 'user', label: 'User', options: mockUsers.map(u => ({ value: u.id, label: u.name })) },
+            { key: 'user', label: 'User', options: users.map(u => ({ value: u.id, label: u.name })) },
             { key: 'module', label: 'Module', options: modules.map(m => ({ value: m, label: m })) },
             { key: 'action', label: 'Action', options: actions.map(a => ({ value: a, label: a })) },
           ]}
@@ -223,3 +237,4 @@ export default function AuditLogPage() {
     </div>
   );
 }
+

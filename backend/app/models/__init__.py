@@ -7,14 +7,18 @@ from app.models.role_permission import RolePermission
 from app.models.project import Project
 from app.models.project_member import ProjectMember
 from app.models.project_status import ProjectStatus
+from app.models.team import Team
+from app.models.team_member import TeamMember
+from app.models.sprint import Sprint
 from app.models.task import Task
 from app.models.task_assignment import TaskAssignment
 from app.models.task_comment import TaskComment
+from app.models.ticket_assignee import TicketAssignee
 from app.models.audit_log import AuditLog
 from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "User", "Workspace", "WorkspaceMember", "Role", "Permission", "RolePermission",
-    "Project", "ProjectMember", "ProjectStatus", "Task", "TaskAssignment",
-    "TaskComment", "AuditLog", "RefreshToken",
+    "Project", "ProjectMember", "ProjectStatus", "Team", "TeamMember", "Sprint",
+    "Task", "TaskAssignment", "TaskComment", "TicketAssignee", "AuditLog", "RefreshToken",
 ]

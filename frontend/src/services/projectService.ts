@@ -5,6 +5,7 @@ export const projectService = {
   get: (id: string) => apiClient.get(`/projects/${id}`),
   create: (data: Record<string, unknown>) => apiClient.post('/projects', data),
   update: (id: string, data: Record<string, unknown>) => apiClient.put(`/projects/${id}`, data),
+  delete: (id: string) => apiClient.delete(`/projects/${id}`),
   getMembers: (id: string) => apiClient.get(`/projects/${id}/members`),
   addMember: (id: string, data: { user_id: string; role_id: string }) => apiClient.post(`/projects/${id}/members`, data),
   removeMember: (id: string, userId: string) => apiClient.delete(`/projects/${id}/members/${userId}`),

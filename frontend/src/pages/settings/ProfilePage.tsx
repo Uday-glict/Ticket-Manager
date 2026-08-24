@@ -4,9 +4,11 @@ import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { Avatar } from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const { success: showSuccess } = useToast();
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -15,7 +17,6 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
 
   if (!user) return null;
 
@@ -25,8 +26,7 @@ export default function ProfilePage() {
     setSaving(true);
     await new Promise(r => setTimeout(r, 400));
     setSaving(false);
-    setSuccessMsg('Profile updated successfully.');
-    setTimeout(() => setSuccessMsg(''), 2500);
+    showSuccess('Profile updated successfully.');
   };
 
   const handleChangePassword = async () => {
@@ -49,8 +49,7 @@ export default function ProfilePage() {
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
-    setSuccessMsg('Password changed successfully.');
-    setTimeout(() => setSuccessMsg(''), 2500);
+    showSuccess('Password changed successfully.');
   };
 
   return (
@@ -62,12 +61,6 @@ export default function ProfilePage() {
           Manage your account settings and preferences
         </p>
       </div>
-
-      {successMsg && (
-        <div className="px-4 py-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 text-sm">
-          {successMsg}
-        </div>
-      )}
 
       {/* Profile Section */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 space-y-5">
@@ -152,3 +145,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+

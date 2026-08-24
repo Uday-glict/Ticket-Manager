@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   CheckSquare,
@@ -8,14 +9,15 @@ import {
   CalendarDays,
   ArrowRight,
 } from 'lucide-react';
-import { mockTasks, mockProjects, mockUsers } from '../../utils/mockData';
+import { useAuth } from '../../context/AuthContext';
+import { taskService } from '../../services/taskService';
+import { projectService } from '../../services/projectService';
 import { Badge } from '../../components/common/Badge';
 import { Avatar } from '../../components/common/Avatar';
 import type { Task, Project } from '../../types';
+import { mapProject, mapTask } from '../../utils/mappers';
 
-const CURRENT_USER_ID = 'user-3';
-
-const today = new Date('2026-08-21');
+const today = new Date();
 const todayStr = today.toISOString().slice(0, 10);
 
 function isOverdue(dueDate?: string): boolean {
@@ -44,7 +46,12 @@ function formatDate(iso?: string): string {
 }
 
 function TaskRow({ task }: { task: Task }) {
-  const project = mockProjects.find((p) => p.id === task.projectId);
+  const [project, setProject] = useState<Project | undefined>();
+
+  useEffect(() => {
+    projectService.get(task.projectId).then(res => setProject(mapProject(res.data.data || res.data))).catch(() => {});
+  }, [task.projectId]);
+
   const statusLabel = project ? getStatusName(project, task.statusId) : task.statusId;
   const overdue = isOverdue(task.dueDate);
 
@@ -93,11 +100,16 @@ function StatCard({ icon: Icon, label, count, color }: { icon: React.ElementType
 }
 
 function ProjectCard({ project }: { project: Project }) {
-  const projectTasks = mockTasks.filter((t) => t.projectId === project.id);
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  useEffect(() => {
+    taskService.list({ project_id: project.id }).then(res => setTasks((res.data.data || res.data || []).map(mapTask))).catch(() => {});
+  }, [project.id]);
+
   const completedStatuses = project.statuses.filter((s) => s.name.toLowerCase().includes('complet') || s.name.toLowerCase().includes('done'));
   const completedIds = new Set(completedStatuses.map((s) => s.id));
-  const completed = projectTasks.filter((t) => completedIds.has(t.statusId)).length;
-  const total = projectTasks.length;
+  const completed = tasks.filter((t) => completedIds.has(t.statusId)).length;
+  const total = tasks.length;
   const pct = total === 0 ? 0 : Math.round((completed / total) * 100);
 
   return (
@@ -123,11 +135,9 @@ function ProjectCard({ project }: { project: Project }) {
       </div>
       <div className="flex items-center justify-between mt-4">
         <div className="flex -space-x-2">
-          {project.members.slice(0, 4).map((m) => {
-            const user = mockUsers.find((u) => u.id === m.userId);
-            if (!user) return null;
-            return <Avatar key={m.userId} src={user.avatar} name={user.name} size="sm" className="ring-2 ring-white dark:ring-slate-900" />;
-          })}
+          {project.members.slice(0, 4).map((m) => (
+            <Avatar key={m.userId} src="" name={m.userId} size="sm" className="ring-2 ring-white dark:ring-slate-900" />
+          ))}
           {project.members.length > 4 && (
             <span className="flex items-center justify-center h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 text-xs font-medium text-slate-600 dark:text-slate-300 ring-2 ring-white dark:ring-slate-900">
               +{project.members.length - 4}
@@ -141,17 +151,40 @@ function ProjectCard({ project }: { project: Project }) {
 }
 
 export default function DeveloperDashboard() {
-  const myTasks = mockTasks.filter((t) => t.assignedTo === CURRENT_USER_ID);
+  const { user: currentUser } = useAuth();
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    Promise.all([
+      taskService.list({ assigned_to: currentUser.id }),
+      projectService.list(),
+    ]).then(([tasksRes, projectsRes]) => {
+      setTasks((tasksRes.data.data || tasksRes.data || []).map(mapTask));
+      setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
+    }).finally(() => setLoading(false));
+  }, [currentUser]);
+
+  const myTasks = tasks;
   const dueToday = myTasks.filter((t) => isDueToday(t.dueDate));
   const overdueTasks = myTasks.filter((t) => isOverdue(t.dueDate));
   const inProgressTasks = myTasks.filter((t) => {
-    const project = mockProjects.find((p) => p.id === t.projectId);
+    const project = projects.find((p) => p.id === t.projectId);
     if (!project) return false;
     const status = project.statuses.find((s) => s.id === t.statusId);
     return status?.name.toLowerCase().includes('progress') || status?.name.toLowerCase().includes('build') || status?.name.toLowerCase().includes('develop');
   });
-  const myProjects = mockProjects.filter((p) => p.members.some((m) => m.userId === CURRENT_USER_ID));
-  const currentUser = mockUsers.find((u) => u.id === CURRENT_USER_ID);
+  const myProjects = projects.filter((p) => p.members.some((m) => m.userId === currentUser?.id));
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -164,7 +197,6 @@ export default function DeveloperDashboard() {
         </p>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard icon={CheckSquare} label="My Tasks" count={myTasks.length} color="bg-blue-500" />
         <StatCard icon={CalendarDays} label="Due Today" count={dueToday.length} color="bg-amber-500" />
@@ -173,9 +205,7 @@ export default function DeveloperDashboard() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Left column – tasks */}
         <div className="xl:col-span-2 space-y-6">
-          {/* Tasks Due Today */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <Clock className="h-5 w-5 text-amber-500" />
@@ -194,7 +224,6 @@ export default function DeveloperDashboard() {
             )}
           </section>
 
-          {/* Overdue Tasks */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="h-5 w-5 text-red-500" />
@@ -213,7 +242,6 @@ export default function DeveloperDashboard() {
             )}
           </section>
 
-          {/* In Progress */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <Loader2 className="h-5 w-5 text-primary-500" />
@@ -232,7 +260,6 @@ export default function DeveloperDashboard() {
             )}
           </section>
 
-          {/* All My Tasks */}
           <section>
             <div className="flex items-center gap-2 mb-3">
               <CheckSquare className="h-5 w-5 text-blue-500" />
@@ -246,7 +273,6 @@ export default function DeveloperDashboard() {
           </section>
         </div>
 
-        {/* Right column – projects */}
         <div className="space-y-6">
           <section>
             <div className="flex items-center gap-2 mb-3">
@@ -264,3 +290,6 @@ export default function DeveloperDashboard() {
     </div>
   );
 }
+
+
+

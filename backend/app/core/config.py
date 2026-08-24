@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str = '["http://localhost:5173"]'
     ENVIRONMENT: str = "development"
+    MAX_AVATAR_SIZE_MB: int = 5
+    ALLOWED_AVATAR_TYPES: str = '["image/jpeg","image/png","image/webp"]'
+    AVATAR_STORAGE_DIR: str = "uploads/avatars"
 
     @property
     def cors_origins_list(self) -> List[str]:

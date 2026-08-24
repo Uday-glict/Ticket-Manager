@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Plus, Edit, UserCheck, UserX, MoreVertical } from 'lucide-react';
 import { Table, type Column } from '../../components/common/Table';
 import { Pagination } from '../../components/common/Pagination';
@@ -8,14 +8,22 @@ import { Badge } from '../../components/common/Badge';
 import { Avatar } from '../../components/common/Avatar';
 import { Button } from '../../components/common/Button';
 import { Dropdown } from '../../components/common/Dropdown';
-import { mockUsers, mockProjects, mockRoles } from '../../utils/mockData';
-import type { User } from '../../types';
+import { userService } from '../../services/userService';
+import { projectService } from '../../services/projectService';
+import { roleService } from '../../services/roleService';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../api/apiClient';
+import type { User, Project, Role } from '../../types';
+import { mapProject, mapUser, mapRole } from '../../utils/mappers';
 import UserFormModal from './UserFormModal';
 
 const PAGE_SIZE = 5;
 
 export default function UserListPage() {
-  const [users, setUsers] = useState<User[]>(mockUsers);
+  const { success: showSuccess, error: showError } = useToast();
+  const [users, setUsers] = useState<User[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [search, setSearch] = useState('');
   const [filterValues, setFilterValues] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
@@ -24,20 +32,32 @@ export default function UserListPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
+  useEffect(() => {
+    Promise.all([
+      userService.list(),
+      projectService.list(),
+      roleService.list(),
+    ]).then(([usersRes, projectsRes, rolesRes]) => {
+      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
+      setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
+      setRoles((rolesRes.data.data || rolesRes.data || []).map(mapRole));
+    }).catch(() => {});
+  }, []);
+
   const getUserProjects = (userId: string) =>
-    mockProjects.filter(p => p.members.some(m => m.userId === userId));
+    projects.filter(p => p.members.some(m => m.userId === userId));
 
   const getUserRoles = (userId: string) => {
-    const roles: string[] = [];
-    mockProjects.forEach(p => {
+    const userRoles: string[] = [];
+    projects.forEach(p => {
       p.members.forEach(m => {
         if (m.userId === userId) {
-          const role = mockRoles.find(r => r.id === m.roleId);
-          if (role && !roles.includes(role.name)) roles.push(role.name);
+          const role = roles.find(r => r.id === m.roleId);
+          if (role && !userRoles.includes(role.name)) userRoles.push(role.name);
         }
       });
     });
-    return roles;
+    return userRoles;
   };
 
   const enriched = useMemo(() => {
@@ -46,7 +66,7 @@ export default function UserListPage() {
       projectCount: getUserProjects(u.id).length,
       roles: getUserRoles(u.id),
     }));
-  }, [users]);
+  }, [users, projects, roles]);
 
   const filtered = useMemo(() => {
     let result = enriched;
@@ -80,29 +100,82 @@ export default function UserListPage() {
     }
   };
 
-  const handleToggleStatus = (userId: string) => {
-    setUsers(prev =>
-      prev.map(u =>
-        u.id === userId ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u
-      )
-    );
+  const fetchUsers = () => {
+    userService.list().then(res => {
+      const data = res.data.data || res.data;
+      setUsers((Array.isArray(data) ? data : []).map(mapUser));
+    }).catch(() => {});
   };
 
-  const handleSave = (user: Partial<User> & { projectRoles?: Record<string, string> }) => {
-    if (editingUser) {
+  const handleToggleStatus = async (userId: string) => {
+    const target = users.find(u => u.id === userId);
+    if (!target) return;
+    const newStatus = target.status === 'active' ? 'inactive' : 'active';
+    try {
+      await userService.toggleStatus(userId, newStatus);
       setUsers(prev =>
-        prev.map(u => (u.id === editingUser.id ? { ...u, ...user } : u))
+        prev.map(u =>
+          u.id === userId ? { ...u, status: newStatus } : u
+        )
       );
-    } else {
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        name: user.name ?? '',
-        email: user.email ?? '',
-        status: user.status ?? 'active',
-        createdAt: new Date().toISOString(),
-        avatar: `https://i.pravatar.cc/150?u=${user.name}`,
-      };
-      setUsers(prev => [...prev, newUser]);
+      showSuccess(`User ${newStatus === 'active' ? 'activated' : 'deactivated'} successfully`);
+    } catch (err: any) {
+      showError(getErrorMessage(err));
+    }
+  };
+
+  const handleSave = async (userData: Partial<User> & { projectRoles?: Record<string, string>; avatarFile?: File | null; password?: string }) => {
+    try {
+      if (editingUser) {
+        const res = await userService.update(editingUser.id, { name: userData.name, email: userData.email, status: userData.status });
+        const updated = res.data.data || res.data;
+        let avatarUrl = editingUser.avatar;
+        if (userData.avatarFile) {
+          try {
+            const avRes = await userService.uploadAvatar(editingUser.id, userData.avatarFile);
+            avatarUrl = avRes.data.data?.avatar_url || avRes.data.avatar_url || avatarUrl;
+            showSuccess(avRes.data.message || 'Avatar updated');
+          } catch (e: any) {
+            showError(getErrorMessage(e));
+          }
+        }
+        setUsers(prev =>
+          prev.map(u => (u.id === editingUser.id ? { ...u, name: updated.name || userData.name!, email: updated.email || userData.email!, status: updated.status || userData.status!, avatar: avatarUrl } : u))
+        );
+        showSuccess(res.data.message || 'User updated successfully');
+        if (userData.projectRoles) {
+          for (const [projId, roleId] of Object.entries(userData.projectRoles)) {
+            try { await projectService.addMember(projId, { user_id: editingUser.id, role_id: roleId }); } catch {}
+          }
+        }
+      } else {
+        const fd = new FormData();
+        fd.append('name', userData.name || '');
+        fd.append('email', userData.email || '');
+        if ((userData as any).password) fd.append('password', (userData as any).password);
+        else fd.append('password', 'TempPass123!');
+        if (userData.avatarFile) fd.append('avatar', userData.avatarFile);
+        const res = await userService.create(fd as any);
+        const created = res.data.data || res.data;
+        const newUser: User = {
+          id: created.id,
+          name: created.name,
+          email: created.email,
+          status: created.status,
+          createdAt: new Date().toISOString(),
+          avatar: created.avatar,
+        };
+        setUsers(prev => [...prev, newUser]);
+        showSuccess(res.data.message || 'User created successfully');
+        if (userData.projectRoles) {
+          for (const [projId, roleId] of Object.entries(userData.projectRoles)) {
+            try { await projectService.addMember(projId, { user_id: newUser.id, role_id: roleId }); } catch {}
+          }
+        }
+      }
+    } catch (err: any) {
+      showError(getErrorMessage(err));
+      return;
     }
     setModalOpen(false);
     setEditingUser(null);
@@ -269,3 +342,4 @@ export default function UserListPage() {
     </div>
   );
 }
+

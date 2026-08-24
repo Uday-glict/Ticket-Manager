@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   DndContext,
   closestCorners,
@@ -17,11 +17,16 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { LayoutGrid } from 'lucide-react';
-import { mockProjects, mockTasks, mockUsers } from '../../utils/mockData';
+import { useNavigate } from 'react-router-dom';
+import { projectService } from '../../services/projectService';
+import { taskService } from '../../services/taskService';
 import { KanbanColumn } from '../../components/common/KanbanColumn';
 import { KanbanCard } from '../../components/common/KanbanCard';
 import { Select } from '../../components/common/Select';
-import type { Task, ProjectStatus } from '../../types';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../api/apiClient';
+import type { Task, ProjectStatus, Project } from '../../types';
+import { mapProject, mapTask } from '../../utils/mappers';
 
 function SortableTaskCard({
   task,
@@ -74,18 +79,37 @@ function DroppableColumn({
 }
 
 export default function KanbanBoardPage() {
-  const [selectedProjectId, setSelectedProjectId] = useState(mockProjects[0]?.id ?? '');
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
+  const navigate = useNavigate();
+  const { success: showSuccess, error: showError } = useToast();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [allTasks, setAllTasks] = useState<Task[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState('');
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
+  useEffect(() => {
+    Promise.all([
+      projectService.list(),
+      taskService.list(),
+    ]).then(([projectsRes, tasksRes]) => {
+      const pData = projectsRes.data.data || projectsRes.data || [];
+      const tData = tasksRes.data.data || tasksRes.data || [];
+      setProjects((Array.isArray(pData) ? pData : []).map(mapProject));
+      setAllTasks((Array.isArray(tData) ? tData : []).map(mapTask));
+      const list = Array.isArray(pData) ? pData : [];
+      if (list.length > 0) {
+        setSelectedProjectId(mapProject(list[0]).id);
+      }
+    }).catch(() => {});
+  }, []);
+
   const project = useMemo(
-    () => mockProjects.find((p) => p.id === selectedProjectId),
-    [selectedProjectId]
+    () => projects.find((p) => p.id === selectedProjectId),
+    [selectedProjectId, projects]
   );
 
   const projectTasks = useMemo(
-    () => tasks.filter((t) => t.projectId === selectedProjectId),
-    [tasks, selectedProjectId]
+    () => allTasks.filter((t) => t.projectId === selectedProjectId),
+    [allTasks, selectedProjectId]
   );
 
   const statuses = useMemo(
@@ -93,7 +117,7 @@ export default function KanbanBoardPage() {
     [project]
   );
 
-  const getUserById = useCallback((id: string) => mockUsers.find((u) => u.id === id), []);
+  const getUserById = useCallback((id: string) => ({ name: id } as any), []);
 
   const getTasksForStatus = useCallback(
     (statusId: string) =>
@@ -113,16 +137,16 @@ export default function KanbanBoardPage() {
   );
 
   const findTaskById = useCallback(
-    (id: string) => tasks.find((t) => t.id === id) ?? null,
-    [tasks]
+    (id: string) => allTasks.find((t) => t.id === id) ?? null,
+    [allTasks]
   );
 
   const findStatusForTask = useCallback(
     (taskId: string) => {
-      const task = tasks.find((t) => t.id === taskId);
+      const task = allTasks.find((t) => t.id === taskId);
       return task?.statusId ?? null;
     },
-    [tasks]
+    [allTasks]
   );
 
   const handleDragStart = useCallback(
@@ -156,11 +180,20 @@ export default function KanbanBoardPage() {
 
       if (!overStatus || activeStatus === overStatus) return;
 
-      setTasks((prev) =>
+      setAllTasks((prev) =>
         prev.map((t) => (t.id === activeId ? { ...t, statusId: overStatus! } : t))
       );
+      taskService.update(activeId, { status_id: overStatus }).then(res => {
+        const msg = (res as any).data?.message;
+        if (msg) showSuccess(msg);
+      }).catch((err: any) => {
+        showError(getErrorMessage(err));
+        setAllTasks((prev) =>
+          prev.map((t) => (t.id === activeId ? { ...t, statusId: activeStatus } : t))
+        );
+      });
     },
-    [findStatusForTask, findTaskById, statuses]
+    [findStatusForTask, findTaskById, statuses, showSuccess, showError]
   );
 
   const handleDragEnd = useCallback(
@@ -182,7 +215,7 @@ export default function KanbanBoardPage() {
       if (!activeStatus || !overStatus) return;
 
       if (activeStatus === overStatus && overTask) {
-        setTasks((prev) => {
+        setAllTasks((prev) => {
           const columnTasks = prev.filter(
             (t) => t.statusId === activeStatus && t.projectId === selectedProjectId
           );
@@ -205,11 +238,11 @@ export default function KanbanBoardPage() {
     [findStatusForTask, findTaskById, statuses, selectedProjectId]
   );
 
-  const projectOptions = mockProjects.map((p) => ({ value: p.id, label: p.name }));
+  const projectOptions = projects.map((p) => ({ value: p.id, label: p.name }));
 
   const handleCardClick = useCallback((task: Task) => {
-    console.log('Open task detail:', task.id);
-  }, []);
+    navigate(`/tasks/${task.id}`);
+  }, [navigate]);
 
   return (
     <div className="h-full flex flex-col">
@@ -277,3 +310,4 @@ export default function KanbanBoardPage() {
     </div>
   );
 }
+

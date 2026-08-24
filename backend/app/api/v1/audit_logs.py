@@ -4,6 +4,8 @@ from app.db.database import get_db
 from app.services.audit_service import AuditService
 from app.dependencies.permissions import require_permission
 from app.models.workspace_member import WorkspaceMember
+from app.utils.response import success_response
+from app.constants.messages import AUDIT_MESSAGES
 from uuid import UUID
 
 router = APIRouter(prefix="/audit-logs", tags=["audit-logs"])
@@ -20,4 +22,7 @@ async def list_audit_logs(
 ):
     service = AuditService(db)
     logs = await service.list_logs(workspace_member.workspace_id, entity_type, user_id, page, limit)
-    return {"success": True, "data": [{"id": str(l.id), "user_id": str(l.user_id), "action": l.action, "entity_type": l.entity_type, "entity_id": str(l.entity_id), "entity_name": l.entity_name, "previous_value": l.previous_value, "new_value": l.new_value, "created_at": str(l.created_at)} for l in logs]}
+    return success_response(
+        data=[{"id": str(l.id), "user_id": str(l.user_id), "action": l.action, "entity_type": l.entity_type, "entity_id": str(l.entity_id), "entity_name": l.entity_name, "previous_value": l.previous_value, "new_value": l.new_value, "created_at": str(l.created_at)} for l in logs],
+        message=AUDIT_MESSAGES["LIST_SUCCESS"],
+    )

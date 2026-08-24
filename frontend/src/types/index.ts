@@ -65,6 +65,58 @@ export interface Task {
   attachments?: Attachment[];
   createdAt: string;
   updatedAt: string;
+  teamId?: string;
+  sprintId?: string;
+  ticketKey?: string;
+  assigneeIds?: string[];
+}
+
+export interface Team {
+  id: string;
+  projectId: string;
+  name: string;
+  description?: string;
+  status: 'active' | 'archived';
+  memberIds: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Sprint {
+  id: string;
+  projectId: string;
+  teamId?: string;
+  name: string;
+  description?: string;
+  goal?: string;
+  startDate: string;
+  endDate: string;
+  status: 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Ticket extends Task {
+  ticketKey: string;
+  teamId?: string;
+  sprintId?: string;
+  assigneeIds: string[];
+}
+
+export interface CalendarEvent {
+  id: string;
+  type: 'ticket' | 'sprint' | 'project';
+  title: string;
+  start: string;
+  end: string;
+  projectId: string;
+  sprintId?: string;
+  teamId?: string;
+  status?: string;
+  ticketId?: string;
+  color?: string;
 }
 
 export interface Attachment {

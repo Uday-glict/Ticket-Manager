@@ -1,6 +1,6 @@
-import { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Eye } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Eye, Trash2 } from 'lucide-react';
 import { Table, type Column } from '../../components/common/Table';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
@@ -8,20 +8,47 @@ import { Avatar } from '../../components/common/Avatar';
 import { SearchBox } from '../../components/common/SearchBox';
 import { Pagination } from '../../components/common/Pagination';
 import { FilterPanel } from '../../components/common/FilterPanel';
-import { mockProjects, mockUsers, mockTasks } from '../../utils/mockData';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { projectService } from '../../services/projectService';
+import { taskService } from '../../services/taskService';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../api/apiClient';
 import type { Project } from '../../types';
+import { mapProject, mapTask } from '../../utils/mappers';
 
 const PAGE_SIZE = 5;
 
 export default function ProjectListPage() {
+  const navigate = useNavigate();
+  const { success: showSuccess, error: showError } = useToast();
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [allTasks, setAllTasks] = useState<{ projectId: string; statusId: string; statusName: string }[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = () => {
+    setLoading(true);
+    Promise.all([
+      projectService.list(),
+      taskService.list(),
+    ]).then(([projectsRes, tasksRes]) => {
+      const pData = projectsRes.data.data || projectsRes.data || [];
+      const tData = tasksRes.data.data || tasksRes.data || [];
+      setProjects((Array.isArray(pData) ? pData : []).map(mapProject));
+      const rawTasks = Array.isArray(tData) ? tData : [];
+      setAllTasks(rawTasks.map((t: any) => ({ projectId: t.project_id || t.projectId, statusId: t.status_id || t.statusId, statusName: '' })));
+    }).finally(() => setLoading(false));
+  };
+
+  useEffect(() => { fetchData(); }, []);
 
   const filtered = useMemo(() => {
-    let list = [...mockProjects];
+    let list = [...projects];
 
     if (search) {
       const q = search.toLowerCase();
@@ -66,7 +93,7 @@ export default function ProjectListPage() {
     }
 
     return list;
-  }, [search, sortKey, sortDir, filters]);
+  }, [search, sortKey, sortDir, filters, projects]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -80,17 +107,28 @@ export default function ProjectListPage() {
     }
   };
 
-  const getUser = (id: string) => mockUsers.find(u => u.id === id);
-  const getTaskCount = (projId: string) => mockTasks.filter(t => t.projectId === projId).length;
+  const getTaskCount = (projId: string) => allTasks.filter(t => t.projectId === projId).length;
   const getProgress = (proj: Project) => {
-    const total = mockTasks.filter(t => t.projectId === proj.id).length;
+    const total = allTasks.filter(t => t.projectId === proj.id).length;
     if (total === 0) return 0;
-    const done = mockTasks.filter(
+    const done = allTasks.filter(
       t =>
         t.projectId === proj.id &&
-        proj.statuses.some(s => s.id === t.statusId && s.name.toLowerCase().includes('completed') || s.name.toLowerCase().includes('done') || s.name.toLowerCase().includes('complete'))
+        proj.statuses.some(s => s.id === t.statusId && (s.name.toLowerCase().includes('completed') || s.name.toLowerCase().includes('done') || s.name.toLowerCase().includes('complete')))
     ).length;
     return Math.round((done / total) * 100);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      const res: any = await projectService.delete(deleteTarget.id);
+      setProjects(prev => prev.filter(p => p.id !== deleteTarget.id));
+      showSuccess(res.data?.message || 'Project deleted successfully');
+    } catch (err: any) {
+      showError(getErrorMessage(err));
+    }
+    setDeleteTarget(null);
   };
 
   const columns: Column<Project>[] = [
@@ -99,37 +137,29 @@ export default function ProjectListPage() {
       header: 'Name',
       sortable: true,
       render: p => (
-        <span className="font-medium text-slate-900 dark:text-slate-100 cursor-pointer hover:text-primary-500 transition-colors">
+        <Link to={`/projects/${p.id}`} className="font-medium text-slate-900 dark:text-slate-100 hover:text-primary-500 transition-colors cursor-pointer">
           {p.name}
-        </span>
+        </Link>
       ),
     },
     {
       key: 'manager',
       header: 'Manager',
-      render: p => {
-        const mgr = getUser(p.managerId);
-        return mgr ? (
-          <div className="flex items-center gap-2">
-            <Avatar src={mgr.avatar} name={mgr.name} size="sm" />
-            <span>{mgr.name}</span>
-          </div>
-        ) : (
-          '—'
-        );
-      },
+      render: p => (
+        <div className="flex items-center gap-2">
+          <Avatar src="" name={p.managerId} size="sm" />
+          <span className="text-sm">{p.managerId}</span>
+        </div>
+      ),
     },
     {
       key: 'members',
       header: 'Members',
       render: p => (
         <div className="flex -space-x-2">
-          {p.members.slice(0, 4).map(m => {
-            const u = getUser(m.userId);
-            return u ? (
-              <Avatar key={m.userId} src={u.avatar} name={u.name} size="sm" className="ring-2 ring-white dark:ring-slate-900" />
-            ) : null;
-          })}
+          {p.members.slice(0, 4).map((m, i) => (
+            <Avatar key={i} src="" name={m.userId} size="sm" className="ring-2 ring-white dark:ring-slate-900" />
+          ))}
           {p.members.length > 4 && (
             <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-medium ring-2 ring-white dark:ring-slate-900">
               +{p.members.length - 4}
@@ -164,7 +194,7 @@ export default function ProjectListPage() {
       sortable: true,
       render: p => (
         <span className="text-slate-500 dark:text-slate-400">
-          {new Date(p.startDate).toLocaleDateString()}
+          {p.startDate ? new Date(p.startDate).toLocaleDateString() : '—'}
         </span>
       ),
     },
@@ -191,12 +221,22 @@ export default function ProjectListPage() {
     {
       key: 'actions',
       header: '',
+      className: 'w-24',
       render: p => (
-        <Link to={`/projects/${p.id}`}>
-          <Button variant="ghost" size="sm">
-            <Eye className="h-4 w-4" />
-          </Button>
-        </Link>
+        <div className="flex items-center gap-1">
+          <Link to={`/projects/${p.id}`}>
+            <Button variant="ghost" size="sm">
+              <Eye className="h-4 w-4" />
+            </Button>
+          </Link>
+          <button
+            onClick={() => setDeleteTarget(p)}
+            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+            title="Delete"
+          >
+            <Trash2 className="h-4 w-4 text-red-500" />
+          </button>
+        </div>
       ),
     },
   ];
@@ -249,6 +289,16 @@ export default function ProjectListPage() {
       </div>
 
       <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }
+

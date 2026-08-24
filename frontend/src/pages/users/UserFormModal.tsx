@@ -4,14 +4,17 @@ import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
 import { MultiSelect } from '../../components/common/MultiSelect';
 import { Button } from '../../components/common/Button';
-import { mockProjects, mockRoles } from '../../utils/mockData';
-import type { User } from '../../types';
+import { Avatar } from '../../components/common/Avatar';
+import { projectService } from '../../services/projectService';
+import { roleService } from '../../services/roleService';
+import type { User, Project, Role } from '../../types';
+import { mapProject, mapRole } from '../../utils/mappers';
 
 interface UserFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User | null;
-  onSave: (data: Partial<User> & { projectRoles?: Record<string, string> }) => void;
+  onSave: (data: Partial<User> & { projectRoles?: Record<string, string>; avatarFile?: File | null; password?: string }) => void;
 }
 
 export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFormModalProps) {
@@ -21,26 +24,44 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [projectRoles, setProjectRoles] = useState<Record<string, string>>({});
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
   const isEdit = !!user;
+
+  useEffect(() => {
+    if (isOpen) {
+      Promise.all([
+        projectService.list(),
+        roleService.list(),
+      ]).then(([projectsRes, rolesRes]) => {
+        setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
+        setRoles((rolesRes.data.data || rolesRes.data || []).map(mapRole));
+      }).catch(() => {});
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (user) {
       setName(user.name);
       setEmail(user.email);
       setStatus(user.status);
-      const userProjects = mockProjects
+      setAvatarPreview(user.avatar || null);
+      setAvatarFile(null);
+      const userProjects = projects
         .filter(p => p.members.some(m => m.userId === user.id))
         .map(p => p.id);
       setSelectedProjects(userProjects);
-      const roles: Record<string, string> = {};
-      mockProjects.forEach(p => {
+      const roleMap: Record<string, string> = {};
+      projects.forEach(p => {
         const member = p.members.find(m => m.userId === user.id);
         if (member) {
-          roles[p.id] = member.roleId;
+          roleMap[p.id] = member.roleId;
         }
       });
-      setProjectRoles(roles);
+      setProjectRoles(roleMap);
     } else {
       setName('');
       setEmail('');
@@ -48,8 +69,10 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
       setStatus('active');
       setSelectedProjects([]);
       setProjectRoles({});
+      setAvatarFile(null);
+      setAvatarPreview(null);
     }
-  }, [user, isOpen]);
+  }, [user, isOpen, projects]);
 
   const handleProjectToggle = (projectIds: string[]) => {
     setSelectedProjects(projectIds);
@@ -58,7 +81,7 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
       if (!projectIds.includes(k)) delete newRoles[k];
     });
     projectIds.forEach(id => {
-      if (!newRoles[id]) newRoles[id] = mockRoles[0]?.id ?? '';
+      if (!newRoles[id]) newRoles[id] = roles[0]?.id ?? '';
     });
     setProjectRoles(newRoles);
   };
@@ -67,25 +90,46 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
     setProjectRoles(prev => ({ ...prev, [projectId]: roleId }));
   };
 
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null;
+    setAvatarFile(file);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setAvatarPreview(url);
+    } else {
+      setAvatarPreview(user?.avatar || null);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSave({
       name,
       email,
+      password: !isEdit ? password : undefined,
       status,
       projectRoles,
+      avatarFile,
     });
   };
 
-  const projectOptions = mockProjects
+  const projectOptions = projects
     .filter(p => p.status === 'active')
     .map(p => ({ value: p.id, label: p.name }));
 
-  const roleOptions = mockRoles.map(r => ({ value: r.id, label: r.name }));
+  const roleOptions = roles.map(r => ({ value: r.id, label: r.name }));
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={isEdit ? 'Edit User' : 'Add User'} size="lg">
       <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="flex items-center gap-4">
+          <Avatar src={avatarPreview || user?.avatar} name={name || 'New User'} size="lg" className="h-16 w-16 text-lg" />
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Avatar</label>
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer" />
+            <p className="text-xs text-slate-400 mt-1">JPG, PNG, WEBP up to 5MB</p>
+          </div>
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Input
             label="Name"
@@ -144,7 +188,7 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {selectedProjects.map(projId => {
-                  const project = mockProjects.find(p => p.id === projId);
+                  const project = projects.find(p => p.id === projId);
                   return (
                     <Select
                       key={projId}
@@ -173,3 +217,4 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
     </Modal>
   );
 }
+

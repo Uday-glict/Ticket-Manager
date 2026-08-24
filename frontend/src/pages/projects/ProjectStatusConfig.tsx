@@ -108,3 +108,4 @@ export function ProjectStatusConfig({ statuses, onChange, className }: ProjectSt
 }
 
 export default ProjectStatusConfig;
+

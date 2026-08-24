@@ -1,14 +1,20 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Plus, Trash2, ChevronUp, ChevronDown, Loader2 } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { DatePicker } from '../../components/common/DatePicker';
 import { Select } from '../../components/common/Select';
 import { Avatar } from '../../components/common/Avatar';
 import { Switch } from '../../components/common/Switch';
-import { mockUsers, mockRoles } from '../../utils/mockData';
-import type { ProjectStatus, ProjectMember } from '../../types';
+import { projectService } from '../../services/projectService';
+import { userService } from '../../services/userService';
+import { roleService } from '../../services/roleService';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../api/apiClient';
+import { ROUTES } from '../../constants/routes';
+import type { ProjectStatus, ProjectMember, User, Role } from '../../types';
+import { mapUser, mapRole, mapProject } from '../../utils/mappers';
 
 const DEFAULT_STATUSES: ProjectStatus[] = [
   { id: 'new-1', name: 'Started', color: '#94a3b8', order: 0, enabled: true },
@@ -19,14 +25,57 @@ const DEFAULT_STATUSES: ProjectStatus[] = [
 
 export default function CreateProjectPage() {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEditing = !!id;
+  const { success: showSuccess, error: showError } = useToast();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [managerId, setManagerId] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [statuses, setStatuses] = useState<ProjectStatus[]>(DEFAULT_STATUSES);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [originalMembers, setOriginalMembers] = useState<ProjectMember[]>([]);
+  const [originalStatuses, setOriginalStatuses] = useState<ProjectStatus[]>([]);
+
+  useEffect(() => {
+    Promise.all([
+      userService.list(),
+      roleService.list(),
+    ]).then(([usersRes, rolesRes]) => {
+      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
+      const mappedRoles = (rolesRes.data.data || rolesRes.data || []).map(mapRole);
+      setRoles(mappedRoles);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!isEditing || !id) return;
+    setFetching(true);
+    projectService.get(id).then(res => {
+      const raw = res.data.data || res.data;
+      const p = mapProject(raw);
+      setName(p.name);
+      setDescription(p.description);
+      setManagerId(p.managerId);
+      setStartDate(p.startDate ? p.startDate.slice(0,10) : '');
+      setEndDate(p.endDate ? p.endDate.slice(0,10) : '');
+      setMembers(p.members);
+      setOriginalMembers(p.members);
+      const sts = p.statuses.length ? p.statuses : DEFAULT_STATUSES;
+      setStatuses(sts);
+      setOriginalStatuses(sts);
+    }).catch(() => {
+      showError('Failed to load project');
+      navigate(ROUTES.PROJECTS);
+    }).finally(() => setFetching(false));
+  }, [id, isEditing]);
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -35,16 +84,87 @@ export default function CreateProjectPage() {
     return Object.keys(e).length === 0;
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return;
-    // Mock creation - in real app would call API
-    navigate('/projects');
+    setLoading(true);
+    try {
+      if (isEditing && id) {
+        await projectService.update(id, {
+          name: name.trim(),
+          description: description.trim(),
+          manager_id: managerId || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        });
+        const originalIds = new Set(originalMembers.map(m => m.userId));
+        const currentIds = new Set(members.map(m => m.userId));
+        for (const m of originalMembers) {
+          if (!currentIds.has(m.userId)) {
+            await projectService.removeMember(id, m.userId);
+          }
+        }
+        for (const m of members) {
+          const orig = originalMembers.find(o => o.userId === m.userId);
+          if (!orig) {
+            await projectService.addMember(id, { user_id: m.userId, role_id: m.roleId });
+          } else if (orig.roleId !== m.roleId) {
+            await projectService.removeMember(id, m.userId);
+            await projectService.addMember(id, { user_id: m.userId, role_id: m.roleId });
+          }
+        }
+        const origStatusMap = new Map(originalStatuses.map(s => [s.id, s]));
+        const currentIdsS = new Set(statuses.map(s => s.id));
+        for (const s of originalStatuses) {
+          if (!currentIdsS.has(s.id)) {
+            await projectService.deleteStatus(id, s.id);
+          }
+        }
+        for (const s of statuses) {
+          if (s.id.startsWith('new-') || s.id.startsWith('status-')) {
+            await projectService.createStatus(id, { name: s.name, color: s.color });
+          } else if (origStatusMap.has(s.id)) {
+            const orig = origStatusMap.get(s.id)!;
+            if (orig.name !== s.name || orig.color !== s.color || orig.enabled !== s.enabled || orig.order !== s.order) {
+              await projectService.updateStatus(id, s.id, { name: s.name, color: s.color, is_enabled: s.enabled, display_order: s.order });
+            }
+          }
+        }
+        showSuccess('Project updated successfully');
+      } else {
+        const projectRes = await projectService.create({
+          name: name.trim(),
+          description: description.trim(),
+          manager_id: managerId || undefined,
+          start_date: startDate || undefined,
+          end_date: endDate || undefined,
+        });
+        const projectData = projectRes.data.data || projectRes.data;
+        const projectId = projectData.id || projectData.data?.id;
+        const pid = projectId || projectData.id;
+        for (const m of members) {
+          await projectService.addMember(pid, { user_id: m.userId, role_id: m.roleId });
+        }
+        for (const s of statuses) {
+          if (s.name.trim()) {
+            await projectService.createStatus(pid, { name: s.name, color: s.color });
+          }
+        }
+        showSuccess(projectRes.data.message || 'Project created successfully');
+      }
+      navigate(ROUTES.DASHBOARD);
+    } catch (err: any) {
+      const message = getErrorMessage(err);
+      showError(message);
+      setErrors({ name: message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addMember = () => {
-    const available = mockUsers.filter(u => !members.some(m => m.userId === u.id));
+    const available = users.filter(u => !members.some(m => m.userId === u.id));
     if (available.length > 0) {
-      setMembers([...members, { userId: available[0].id, roleId: mockRoles[1]?.id ?? mockRoles[0].id }]);
+      setMembers([...members, { userId: available[0].id, roleId: roles[1]?.id ?? roles[0]?.id }]);
     }
   };
 
@@ -84,7 +204,15 @@ export default function CreateProjectPage() {
     setStatuses(copy);
   };
 
-  const availableUsers = mockUsers.filter(u => !members.some(m => m.userId === u.id));
+  const availableUsers = users.filter(u => !members.some(m => m.userId === u.id));
+
+  if (fetching) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
@@ -92,10 +220,9 @@ export default function CreateProjectPage() {
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Create Project</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{isEditing ? 'Edit Project' : 'Create Project'}</h1>
       </div>
 
-      {/* Basic Information */}
       <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 space-y-4">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Basic Information</h2>
         <Input
@@ -116,9 +243,15 @@ export default function CreateProjectPage() {
             className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors text-sm resize-none cursor-text"
           />
         </div>
+        <Select
+          label="Project Manager"
+          options={users.map(u => ({ value: u.id, label: u.name }))}
+          placeholder="Select a manager"
+          value={managerId}
+          onChange={e => setManagerId(e.target.value)}
+        />
       </section>
 
-      {/* Timeline */}
       <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Timeline</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -135,13 +268,12 @@ export default function CreateProjectPage() {
         </div>
       </section>
 
-      {/* Project Members */}
       <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 space-y-4">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Project Members</h2>
         {members.length > 0 && (
           <div className="space-y-3">
             {members.map(m => {
-              const user = mockUsers.find(u => u.id === m.userId);
+              const user = users.find(u => u.id === m.userId);
               if (!user) return null;
               return (
                 <div key={m.userId} className="flex items-center gap-3 p-3 rounded-lg bg-slate-50 dark:bg-slate-800/50">
@@ -152,7 +284,7 @@ export default function CreateProjectPage() {
                     onChange={e => updateMemberRole(m.userId, e.target.value)}
                     className="px-2 py-1 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500 cursor-pointer"
                   >
-                    {mockRoles.map(r => (
+                    {roles.map(r => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
                   </select>
@@ -174,14 +306,13 @@ export default function CreateProjectPage() {
             value=""
             onChange={e => {
               if (e.target.value) {
-                setMembers([...members, { userId: e.target.value, roleId: mockRoles[1]?.id ?? mockRoles[0].id }]);
+                setMembers([...members, { userId: e.target.value, roleId: roles[1]?.id ?? roles[0]?.id }]);
               }
             }}
           />
         )}
       </section>
 
-      {/* Status Configuration */}
       <section className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Project Status Configuration</h2>
@@ -237,15 +368,16 @@ export default function CreateProjectPage() {
         </div>
       </section>
 
-      {/* Save */}
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={() => navigate(-1)}>
           Cancel
         </Button>
-        <Button onClick={handleSave}>
-          Save Project
+        <Button onClick={handleSave} disabled={loading}>
+          {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isEditing ? 'Update Project' : 'Save Project'}
         </Button>
       </div>
     </div>
   );
 }
+

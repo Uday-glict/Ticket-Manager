@@ -5,6 +5,8 @@ from app.db.database import get_db
 from app.models.project_status import ProjectStatus
 from app.models.task import Task
 from app.dependencies.permissions import require_permission, require_project_member
+from app.utils.response import success_response
+from app.constants.messages import BOARD_MESSAGES
 from uuid import UUID
 
 router = APIRouter(prefix="/board", tags=["board"])
@@ -44,4 +46,4 @@ async def get_board(
             "tasks": tasks_by_status.get(sid, []),
         })
 
-    return {"success": True, "data": columns}
+    return success_response(data=columns, message=BOARD_MESSAGES["GET_SUCCESS"])

@@ -13,6 +13,14 @@ class ProjectMemberRepository:
         result = await self.db.execute(select(ProjectMember).where(ProjectMember.project_id == project_id))
         return list(result.scalars().all())
 
+    async def get_by_user(self, user_id: UUID) -> List[ProjectMember]:
+        result = await self.db.execute(select(ProjectMember).where(ProjectMember.user_id == user_id))
+        return list(result.scalars().all())
+
+    async def is_member(self, project_id: UUID, user_id: UUID) -> bool:
+        result = await self.db.execute(select(ProjectMember).where(ProjectMember.project_id == project_id, ProjectMember.user_id == user_id))
+        return result.scalar_one_or_none() is not None
+
     async def add_member(self, project_id: UUID, user_id: UUID, role_id: UUID) -> ProjectMember:
         member = ProjectMember(project_id=project_id, user_id=user_id, role_id=role_id)
         self.db.add(member)

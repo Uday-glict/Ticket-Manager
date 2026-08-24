@@ -1,7 +1,7 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
 const apiClient = axios.create({
-  baseURL: 'http://localhost:3000/api/v1',
+  baseURL: 'http://localhost:8000/api/v1',
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -44,11 +44,13 @@ apiClient.interceptors.response.use(
         return Promise.reject(error);
       }
       try {
-        const { data } = await axios.post('http://localhost:3000/api/v1/auth/refresh', { refresh_token: refreshToken });
-        localStorage.setItem('access_token', data.access_token);
-        localStorage.setItem('refresh_token', data.refresh_token);
-        processQueue(null, data.access_token);
-        originalRequest.headers.Authorization = `Bearer ${data.access_token}`;
+        const { data } = await axios.post('http://localhost:8000/api/v1/auth/refresh', { refresh_token: refreshToken });
+        const newToken = data.data?.access_token || data.access_token;
+        const newRefresh = data.data?.refresh_token || data.refresh_token;
+        localStorage.setItem('access_token', newToken);
+        localStorage.setItem('refresh_token', newRefresh);
+        processQueue(null, newToken);
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError as AxiosError, null);
@@ -62,5 +64,23 @@ apiClient.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export function getErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error) && error.response?.data) {
+    const data = error.response.data as Record<string, unknown>;
+    if (typeof data.message === 'string') return data.message;
+  }
+  return 'An unexpected error occurred.';
+}
+
+export function getErrorDetails(error: unknown): { code: string; details: unknown } | null {
+  if (axios.isAxiosError(error) && error.response?.data) {
+    const data = error.response.data as Record<string, unknown>;
+    if (data.error && typeof data.error === 'object') {
+      return data.error as { code: string; details: unknown };
+    }
+  }
+  return null;
+}
 
 export default apiClient;

@@ -1,8 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
-import { mockProjects, mockUsers, mockTasks } from '../../utils/mockData';
-import type { Priority } from '../../types';
+import { projectService } from '../../services/projectService';
+import { taskService } from '../../services/taskService';
+import { userService } from '../../services/userService';
+import { useToast } from '../../context/ToastContext';
+import type { Priority, Project, User } from '../../types';
+import { mapProject, mapUser } from '../../utils/mappers';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
@@ -17,6 +21,7 @@ const priorityOptions = [
 
 export default function CreateTaskPage() {
   const navigate = useNavigate();
+  const { error: showError } = useToast();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -27,8 +32,21 @@ export default function CreateTaskPage() {
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
 
-  const selectedProject = mockProjects.find(p => p.id === projectId);
+  useEffect(() => {
+    Promise.all([
+      projectService.list(),
+      userService.list(),
+    ]).then(([projectsRes, usersRes]) => {
+      setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
+      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
+    }).catch(() => {});
+  }, []);
+
+  const selectedProject = projects.find(p => p.id === projectId);
 
   const statusOptions = useMemo(() => {
     if (!selectedProject) return [];
@@ -52,28 +70,30 @@ export default function CreateTaskPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!validate()) return;
 
-    const now = new Date().toISOString();
-    const newTask = {
-      id: `task-${mockTasks.length + 1}`,
-      title: title.trim(),
-      description: description.trim() || undefined,
-      projectId,
-      assignedTo: assignedTo || undefined,
-      createdBy: 'user-1',
-      priority,
-      statusId,
-      startDate: startDate || undefined,
-      dueDate: dueDate || undefined,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    mockTasks.push(newTask);
-    navigate('/tasks');
+    setLoading(true);
+    try {
+      await taskService.create({
+        title: title.trim(),
+        description: description.trim() || undefined,
+        project_id: projectId,
+        assigned_to: assignedTo || undefined,
+        priority,
+        status_id: statusId,
+        start_date: startDate || undefined,
+        due_date: dueDate || undefined,
+      });
+      navigate('/tasks');
+    } catch (err: any) {
+      const message = err.response?.data?.message || 'Failed to create task.';
+      showError(message);
+      setErrors({ title: message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -111,7 +131,7 @@ export default function CreateTaskPage() {
         <Select
           label="Project"
           required
-          options={mockProjects.map(p => ({ value: p.id, label: p.name }))}
+          options={projects.map(p => ({ value: p.id, label: p.name }))}
           placeholder="Select a project"
           value={projectId}
           onChange={e => handleProjectChange(e.target.value)}
@@ -120,7 +140,7 @@ export default function CreateTaskPage() {
 
         <Select
           label="Assigned User"
-          options={mockUsers.map(u => ({ value: u.id, label: u.name }))}
+          options={users.map(u => ({ value: u.id, label: u.name }))}
           placeholder="Select a user"
           value={assignedTo}
           onChange={e => setAssignedTo(e.target.value)}
@@ -166,3 +186,4 @@ export default function CreateTaskPage() {
     </div>
   );
 }
+

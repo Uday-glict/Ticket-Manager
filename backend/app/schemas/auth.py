@@ -5,7 +5,7 @@ from uuid import UUID
 
 class SignupRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8)
+    password: str = Field(min_length=8, max_length=128)
     name: str = Field(min_length=1, max_length=255)
     workspace_name: Optional[str] = None
     workspace_type: str = "individual"

@@ -7,8 +7,7 @@ pydantic==2.11.3
 pydantic-settings==2.9.1
 pydantic[email]==2.11.3
 python-jose[cryptography]==3.4.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1
+argon2-cffi==23.1.0
 python-multipart==0.0.20
 httpx==0.28.1
 pytest==8.3.5
@@ -16,3 +15,4 @@ pytest-asyncio==0.25.3
 python-dotenv==1.1.0
 email-validator==2.3.0
 psycopg2-binary==2.9.12
+Pillow==11.1.0

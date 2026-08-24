@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Plus, Edit, Trash2, Lock } from 'lucide-react';
 import { Table, type Column } from '../../components/common/Table';
@@ -6,17 +6,25 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyState } from '../../components/common/EmptyState';
-import { mockRoles } from '../../utils/mockData';
+import { roleService } from '../../services/roleService';
 import type { Role } from '../../types';
+import { mapRole } from '../../utils/mappers';
 
 export default function RoleListPage() {
   const navigate = useNavigate();
-  const [roles, setRoles] = useState<Role[]>(mockRoles);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
 
-  const handleDelete = () => {
+  useEffect(() => {
+    roleService.list().then(res => setRoles((res.data.data || res.data || []).map(mapRole))).catch(() => {});
+  }, []);
+
+  const handleDelete = async () => {
     if (deleteTarget) {
-      setRoles(prev => prev.filter(r => r.id !== deleteTarget.id));
+      try {
+        await roleService.delete(deleteTarget.id);
+        setRoles(prev => prev.filter(r => r.id !== deleteTarget.id));
+      } catch {}
       setDeleteTarget(null);
     }
   };
@@ -86,7 +94,7 @@ export default function RoleListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Roles</h1>
-        <Button onClick={() => navigate('/roles/new')}>
+        <Button onClick={() => navigate('/roles/create')}>
           <Plus className="h-4 w-4" />
           Create Role
         </Button>
@@ -111,3 +119,5 @@ export default function RoleListPage() {
     </div>
   );
 }
+
+

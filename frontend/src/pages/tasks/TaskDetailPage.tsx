@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -15,9 +15,16 @@ import {
   CheckCircle2,
   CircleDot,
   Tag,
+  Loader2,
 } from 'lucide-react';
-import { mockTasks, mockProjects, mockUsers, mockComments, mockActivities } from '../../utils/mockData';
-import type { Comment, Priority } from '../../types';
+import { taskService } from '../../services/taskService';
+import { projectService } from '../../services/projectService';
+import { commentService } from '../../services/commentService';
+import { auditService } from '../../services/auditService';
+import { userService } from '../../services/userService';
+import { useAuth } from '../../context/AuthContext';
+import type { Comment, Priority, Task, Project, User } from '../../types';
+import { mapUser, mapComment, mapAuditLog, mapTask, mapProject } from '../../utils/mappers';
 import { Badge } from '../../components/common/Badge';
 import { Avatar } from '../../components/common/Avatar';
 import { Button } from '../../components/common/Button';
@@ -119,6 +126,7 @@ interface CommentItemProps {
   onSubmitEdit: (commentId: string) => void;
   onCancelEdit: () => void;
   depth: number;
+  users: User[];
 }
 
 function CommentItem({
@@ -138,8 +146,9 @@ function CommentItem({
   onSubmitEdit,
   onCancelEdit,
   depth,
-}: CommentItemProps) {
-  const user = mockUsers.find(u => u.id === comment.userId);
+  users,
+}: CommentItemProps & { users: User[] }) {
+  const user = users.find(u => u.id === comment.userId);
   const isOwn = comment.userId === currentUser.id;
   const isEditing = editingCommentId === comment.id;
   const isReplying = replyingTo === comment.id;
@@ -245,6 +254,7 @@ function CommentItem({
               key={reply.id}
               comment={{ ...reply, replies: [] }}
               currentUser={currentUser}
+              users={users}
               onReply={onReply}
               onEdit={onEdit}
               onDelete={onDelete}
@@ -270,10 +280,14 @@ function CommentItem({
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
 
-  const [tasks, setTasks] = useState(mockTasks);
-  const [comments, setComments] = useState(mockComments);
-  const [activities, setActivities] = useState(mockActivities);
+  const [task, setTask] = useState<Task | null>(null);
+  const [project, setProject] = useState<Project | undefined>();
+  const [users, setUsers] = useState<User[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState('');
@@ -284,14 +298,23 @@ export default function TaskDetailPage() {
   const [reassignReason, setReassignReason] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-  const task = tasks.find(t => t.id === id);
-
-  const project = useMemo(
-    () => (task ? mockProjects.find(p => p.id === task.projectId) : undefined),
-    [task]
-  );
-
-  const currentUser = mockUsers[0];
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([
+      taskService.get(id),
+      commentService.getByTask(id),
+      auditService.list({ entity_type: 'tasks' }),
+      userService.list(),
+    ]).then(([taskRes, commentsRes, auditRes, usersRes]) => {
+      setTask(mapTask(taskRes.data.data || taskRes.data));
+      setComments((commentsRes.data.data || commentsRes.data || []).map(mapComment));
+      setActivities((auditRes.data.data || auditRes.data || []).map(mapAuditLog));
+      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
+      return projectService.get(mapTask(taskRes.data.data || taskRes.data).projectId);
+    }).then(projectRes => {
+      setProject(mapProject(projectRes.data.data || projectRes.data));
+    }).finally(() => setLoading(false));
+  }, [id]);
 
   const commentTree = useMemo(
     () => (task ? buildCommentTree(comments, task.id) : []),
@@ -302,8 +325,8 @@ export default function TaskDetailPage() {
     () =>
       task
         ? activities
-            .filter(a => a.entityId === task.id)
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .filter(a => a.record === task.id)
+            .sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
         : [],
     [activities, task]
   );
@@ -315,6 +338,14 @@ export default function TaskDetailPage() {
       .sort((a, b) => a.order - b.order)
       .map(s => ({ value: s.id, label: s.name }));
   }, [project]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   if (!task) {
     return (
@@ -330,110 +361,92 @@ export default function TaskDetailPage() {
     );
   }
 
-  const assignedUser = task.assignedTo ? mockUsers.find(u => u.id === task.assignedTo) : null;
-  const createdByUser = mockUsers.find(u => u.id === task.createdBy);
+  const assignedUser = task.assignedTo ? users.find(u => u.id === task.assignedTo) : null;
+  const createdByUser = users.find(u => u.id === task.createdBy);
 
-  const handlePriorityChange = (value: string) => {
-    setTasks(prev =>
-      prev.map(t =>
-        t.id === task.id ? { ...t, priority: value as Priority, updatedAt: new Date().toISOString() } : t
-      )
-    );
+  const handlePriorityChange = async (value: string) => {
+    try {
+      await taskService.update(task.id, { priority: value });
+      setTask(prev => prev ? { ...prev, priority: value as Priority, updatedAt: new Date().toISOString() } : prev);
+    } catch {}
   };
 
-  const handleStatusChange = (value: string) => {
-    setTasks(prev =>
-      prev.map(t =>
-        t.id === task.id ? { ...t, statusId: value, updatedAt: new Date().toISOString() } : t
-      )
-    );
+  const handleStatusChange = async (value: string) => {
+    try {
+      await taskService.update(task.id, { status_id: value });
+      setTask(prev => prev ? { ...prev, statusId: value, updatedAt: new Date().toISOString() } : prev);
+    } catch {}
   };
 
-  const handleStartDateChange = (value: string) => {
-    setTasks(prev =>
-      prev.map(t =>
-        t.id === task.id ? { ...t, startDate: value || undefined, updatedAt: new Date().toISOString() } : t
-      )
-    );
+  const handleStartDateChange = async (value: string) => {
+    try {
+      await taskService.update(task.id, { start_date: value || null });
+      setTask(prev => prev ? { ...prev, startDate: value || undefined, updatedAt: new Date().toISOString() } : prev);
+    } catch {}
   };
 
-  const handleDueDateChange = (value: string) => {
-    setTasks(prev =>
-      prev.map(t =>
-        t.id === task.id ? { ...t, dueDate: value || undefined, updatedAt: new Date().toISOString() } : t
-      )
-    );
+  const handleDueDateChange = async (value: string) => {
+    try {
+      await taskService.update(task.id, { due_date: value || null });
+      setTask(prev => prev ? { ...prev, dueDate: value || undefined, updatedAt: new Date().toISOString() } : prev);
+    } catch {}
   };
 
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
     if (!newComment.trim()) return;
-    const newCommentObj: Comment = {
-      id: `comment-${Date.now()}`,
-      taskId: task.id,
-      userId: currentUser.id,
-      content: newComment.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    setComments(prev => [...prev, newCommentObj]);
-    setNewComment('');
+    try {
+      const res = await commentService.create({ task_id: task.id, content: newComment.trim() });
+      setComments(prev => [...prev, res.data]);
+      setNewComment('');
+    } catch {}
   };
 
-  const handleReply = (parentId: string) => {
+  const handleReply = async (parentId: string) => {
     if (!replyContent.trim()) return;
-    const reply: Comment = {
-      id: `comment-${Date.now()}`,
-      taskId: task.id,
-      userId: currentUser.id,
-      content: replyContent.trim(),
-      parentId,
-      createdAt: new Date().toISOString(),
-    };
-    setComments(prev => [...prev, reply]);
-    setReplyContent('');
-    setReplyingTo(null);
+    try {
+      const res = await commentService.create({ task_id: task.id, content: replyContent.trim(), parent_id: parentId });
+      setComments(prev => [...prev, res.data]);
+      setReplyContent('');
+      setReplyingTo(null);
+    } catch {}
   };
 
-  const handleEditComment = (commentId: string) => {
+  const handleEditComment = async (commentId: string) => {
     if (!editContent.trim()) return;
-    setComments(prev =>
-      prev.map(c =>
-        c.id === commentId ? { ...c, content: editContent.trim(), updatedAt: new Date().toISOString() } : c
-      )
-    );
-    setEditingCommentId(null);
-    setEditContent('');
+    try {
+      await commentService.update(commentId, { content: editContent.trim() });
+      setComments(prev =>
+        prev.map(c =>
+          c.id === commentId ? { ...c, content: editContent.trim(), updatedAt: new Date().toISOString() } : c
+        )
+      );
+      setEditingCommentId(null);
+      setEditContent('');
+    } catch {}
   };
 
-  const handleDeleteComment = (commentId: string) => {
-    setComments(prev => prev.filter(c => c.id !== commentId && c.parentId !== commentId));
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      await commentService.delete(commentId);
+      setComments(prev => prev.filter(c => c.id !== commentId && c.parentId !== commentId));
+    } catch {}
   };
 
-  const handleReassign = () => {
+  const handleReassign = async () => {
     if (!reassignUserId) return;
-    setTasks(prev =>
-      prev.map(t =>
-        t.id === task.id ? { ...t, assignedTo: reassignUserId, updatedAt: new Date().toISOString() } : t
-      )
-    );
-    setActivities(prev => [
-      {
-        id: `act-${Date.now()}`,
-        userId: currentUser.id,
-        action: 'assigned',
-        entity: 'task',
-        entityId: task.id,
-        entityName: task.title,
-        newValue: reassignUserId,
-        createdAt: new Date().toISOString(),
-      },
-      ...prev,
-    ]);
-    setShowReassignModal(false);
-    setReassignUserId('');
-    setReassignReason('');
+    try {
+      await taskService.reassign(task.id, { user_id: reassignUserId, reason: reassignReason || undefined });
+      setTask(prev => prev ? { ...prev, assignedTo: reassignUserId, updatedAt: new Date().toISOString() } : prev);
+      setShowReassignModal(false);
+      setReassignUserId('');
+      setReassignReason('');
+    } catch {}
   };
 
-  const handleDeleteTask = () => {
+  const handleDeleteTask = async () => {
+    try {
+      await taskService.update(task.id, { status_id: '__deleted__' });
+    } catch {}
     navigate('/tasks');
   };
 
@@ -516,7 +529,8 @@ export default function TaskDetailPage() {
                   <CommentItem
                     key={comment.id}
                     comment={comment}
-                    currentUser={currentUser}
+                    currentUser={currentUser ? { id: currentUser.id } : { id: '' }}
+                    users={users}
                     onReply={(cId) => {
                       setReplyingTo(cId);
                       setReplyContent('');
@@ -545,7 +559,7 @@ export default function TaskDetailPage() {
             {/* New Comment */}
             <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-700">
               <div className="flex gap-3">
-                <Avatar src={currentUser.avatar} name={currentUser.name} size="sm" />
+                <Avatar src={currentUser?.avatar} name={currentUser?.name ?? 'You'} size="sm" />
                 <div className="flex-1">
                   <textarea
                     value={newComment}
@@ -581,7 +595,7 @@ export default function TaskDetailPage() {
             ) : (
               <div className="space-y-4">
                 {taskActivities.map(activity => {
-                  const user = mockUsers.find(u => u.id === activity.userId);
+                  const user = users.find(u => u.id === activity.userId);
                   const Icon = activityIcons[activity.action] || CircleDot;
 
                   return (
@@ -599,7 +613,7 @@ export default function TaskDetailPage() {
                           {activity.newValue && activity.action === 'assigned' && (
                             <span className="text-slate-500 dark:text-slate-400">
                               {' → '}
-                              {mockUsers.find(u => u.id === activity.newValue)?.name ?? activity.newValue}
+                              {users.find((u: User) => u.id === activity.newValue)?.name ?? activity.newValue}
                             </span>
                           )}
                         </p>
@@ -710,7 +724,7 @@ export default function TaskDetailPage() {
           </div>
           <Select
             label="New Assignee"
-            options={mockUsers.map(u => ({ value: u.id, label: u.name }))}
+            options={users.map(u => ({ value: u.id, label: u.name }))}
             value={reassignUserId}
             onChange={e => setReassignUserId(e.target.value)}
             placeholder="Select a user"
@@ -756,3 +770,5 @@ export default function TaskDetailPage() {
     </div>
   );
 }
+
+

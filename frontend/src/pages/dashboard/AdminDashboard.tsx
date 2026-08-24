@@ -1,60 +1,35 @@
-import { FolderKanban, CheckCircle, CheckSquare, AlertTriangle, Clock, MessageSquare, Plus, ArrowRight } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { FolderKanban, CheckCircle, CheckSquare, AlertTriangle, Clock, MessageSquare, Plus, ArrowRight, Loader2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { mockProjects, mockTasks, mockUsers, mockActivities } from '../../utils/mockData';
+import { dashboardService } from '../../services/dashboardService';
+import { taskService } from '../../services/taskService';
+import { projectService } from '../../services/projectService';
+import { userService } from '../../services/userService';
+import { auditService } from '../../services/auditService';
 import { Avatar } from '../../components/common/Avatar';
 import { Badge } from '../../components/common/Badge';
+import type { Task, Project, User, AuditLog } from '../../types';
+import { mapProject, mapTask, mapUser, mapAuditLog } from '../../utils/mappers';
 
 const TASK_STATUS_COLORS: Record<string, string> = {
   'To Do': '#94a3b8',
   'In Progress': '#3b82f6',
   'Done': '#22c55e',
   'Review': '#f59e0b',
+  'Started': '#94a3b8',
+  'Planning': '#94a3b8',
+  'Design': '#a855f7',
+  'Development': '#3b82f6',
+  'Build': '#3b82f6',
+  'Testing': '#f59e0b',
+  'Launch': '#f59e0b',
+  'Completed': '#22c55e',
+  'Complete': '#22c55e',
 };
-
-function getTaskStatusCounts() {
-  const counts: Record<string, number> = {};
-  for (const task of mockTasks) {
-    const project = mockProjects.find(p => p.id === task.projectId);
-    const status = project?.statuses.find(s => s.id === task.statusId);
-    const name = status?.name ?? 'Unknown';
-    counts[name] = (counts[name] || 0) + 1;
-  }
-  return Object.entries(counts).map(([name, value]) => ({ name, value }));
-}
 
 function isOverdue(dueDate?: string) {
   if (!dueDate) return false;
   return new Date(dueDate) < new Date();
-}
-
-function getProjectProgress(projectId: string) {
-  const tasks = mockTasks.filter(t => t.projectId === projectId);
-  const project = mockProjects.find(p => p.id === projectId);
-  if (!project || tasks.length === 0) return 0;
-  const completed = tasks.filter(t => {
-    const status = project.statuses.find(s => s.id === t.statusId);
-    return status?.name.toLowerCase().includes('complet') || status?.name.toLowerCase() === 'done';
-  }).length;
-  return Math.round((completed / tasks.length) * 100);
-}
-
-function getTeamWorkload() {
-  return mockUsers.map(user => {
-    const assigned = mockTasks.filter(t => t.assignedTo === user.id);
-    const completed = assigned.filter(t => {
-      const project = mockProjects.find(p => p.id === t.projectId);
-      const status = project?.statuses.find(s => s.id === t.statusId);
-      return status?.name.toLowerCase().includes('complet') || status?.name.toLowerCase() === 'done';
-    });
-    const overdue = assigned.filter(t => isOverdue(t.dueDate));
-    return {
-      ...user,
-      totalAssigned: assigned.length,
-      completedCount: completed.length,
-      pendingCount: assigned.length - completed.length,
-      overdueCount: overdue.length,
-    };
-  });
 }
 
 const actionIcons: Record<string, typeof Clock> = {
@@ -83,18 +58,87 @@ function formatTime(dateStr: string) {
   return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
 }
 
-const workload = getTeamWorkload();
-const taskStatusData = getTaskStatusCounts();
-const overdueCount = mockTasks.filter(t => isOverdue(t.dueDate)).length;
-
-const kpis = [
-  { label: 'Total Projects', value: mockProjects.length, icon: FolderKanban, color: 'bg-blue-500', lightBg: 'bg-blue-50 dark:bg-blue-900/20' },
-  { label: 'Active Projects', value: mockProjects.filter(p => p.status === 'active').length, icon: CheckCircle, color: 'bg-emerald-500', lightBg: 'bg-emerald-50 dark:bg-emerald-900/20' },
-  { label: 'Total Tasks', value: mockTasks.length, icon: CheckSquare, color: 'bg-violet-500', lightBg: 'bg-violet-50 dark:bg-violet-900/20' },
-  { label: 'Overdue Tasks', value: overdueCount, icon: AlertTriangle, color: 'bg-red-500', lightBg: 'bg-red-50 dark:bg-red-900/20' },
-];
-
 export default function AdminDashboard() {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [activities, setActivities] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      taskService.list(),
+      projectService.list(),
+      userService.list(),
+      auditService.list(),
+    ]).then(([tasksRes, projectsRes, usersRes, auditRes]) => {
+      setTasks((tasksRes.data.data || tasksRes.data || []).map(mapTask));
+      setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
+      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
+      setActivities((auditRes.data.data || auditRes.data || []).map(mapAuditLog));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
+  function getTaskStatusCounts() {
+    const counts: Record<string, number> = {};
+    for (const task of tasks) {
+      const project = projects.find(p => p.id === task.projectId);
+      const status = project?.statuses.find(s => s.id === task.statusId);
+      const name = status?.name ?? 'Unknown';
+      counts[name] = (counts[name] || 0) + 1;
+    }
+    return Object.entries(counts).map(([name, value]) => ({ name, value }));
+  }
+
+  function getProjectProgress(projectId: string) {
+    const projectTasks = tasks.filter(t => t.projectId === projectId);
+    const project = projects.find(p => p.id === projectId);
+    if (!project || projectTasks.length === 0) return 0;
+    const completed = projectTasks.filter(t => {
+      const status = project.statuses.find(s => s.id === t.statusId);
+      return status?.name.toLowerCase().includes('complet') || status?.name.toLowerCase() === 'done';
+    }).length;
+    return Math.round((completed / projectTasks.length) * 100);
+  }
+
+  function getTeamWorkload() {
+    return users.map(user => {
+      const assigned = tasks.filter(t => t.assignedTo === user.id);
+      const completed = assigned.filter(t => {
+        const project = projects.find(p => p.id === t.projectId);
+        const status = project?.statuses.find(s => s.id === t.statusId);
+        return status?.name.toLowerCase().includes('complet') || status?.name.toLowerCase() === 'done';
+      });
+      const overdue = assigned.filter(t => isOverdue(t.dueDate));
+      return {
+        ...user,
+        totalAssigned: assigned.length,
+        completedCount: completed.length,
+        pendingCount: assigned.length - completed.length,
+        overdueCount: overdue.length,
+      };
+    });
+  }
+
+  const workload = getTeamWorkload();
+  const taskStatusData = getTaskStatusCounts();
+  const overdueCount = tasks.filter(t => isOverdue(t.dueDate)).length;
+
+  const kpis = [
+    { label: 'Total Projects', value: projects.length, icon: FolderKanban, color: 'bg-blue-500', lightBg: 'bg-blue-50 dark:bg-blue-900/20' },
+    { label: 'Active Projects', value: projects.filter(p => p.status === 'active').length, icon: CheckCircle, color: 'bg-emerald-500', lightBg: 'bg-emerald-50 dark:bg-emerald-900/20' },
+    { label: 'Total Tasks', value: tasks.length, icon: CheckSquare, color: 'bg-violet-500', lightBg: 'bg-violet-50 dark:bg-violet-900/20' },
+    { label: 'Overdue Tasks', value: overdueCount, icon: AlertTriangle, color: 'bg-red-500', lightBg: 'bg-red-50 dark:bg-red-900/20' },
+  ];
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -102,7 +146,6 @@ export default function AdminDashboard() {
         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Overview of all projects, tasks, and team performance.</p>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map(kpi => (
           <div key={kpi.label} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow">
@@ -118,11 +161,10 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Project Progress */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Project Progress</h2>
           <div className="space-y-4">
-            {mockProjects.map(project => {
+            {projects.map(project => {
               const progress = getProjectProgress(project.id);
               return (
                 <div key={project.id} className="cursor-pointer">
@@ -145,7 +187,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Task Status Chart */}
         <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
           <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Task Status Distribution</h2>
           <div className="h-64">
@@ -169,7 +210,6 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Team Workload */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Team Workload</h2>
         <div className="overflow-x-auto">
@@ -216,14 +256,14 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Recent Activity */}
       <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
         <h2 className="text-lg font-semibold text-slate-900 dark:text-white mb-4">Recent Activity</h2>
         <div className="space-y-4">
-          {[...mockActivities]
+          {[...activities]
             .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+            .slice(0, 10)
             .map(activity => {
-              const user = mockUsers.find(u => u.id === activity.userId);
+              const user = users.find(u => u.id === activity.userId);
               const Icon = actionIcons[activity.action] || Clock;
               const colorClass = actionColors[activity.action] || 'text-slate-500';
               return (
@@ -235,7 +275,7 @@ export default function AdminDashboard() {
                     <p className="text-sm text-slate-700 dark:text-slate-300">
                       <span className="font-medium text-slate-900 dark:text-white">{user?.name ?? 'Unknown'}</span>
                       {' '}{activity.action}{' '}
-                      <span className="font-medium text-slate-900 dark:text-white">{activity.entityName}</span>
+                      <span className="font-medium text-slate-900 dark:text-white">{activity.record}</span>
                     </p>
                     <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">
                       {formatDate(activity.createdAt)} at {formatTime(activity.createdAt)}
@@ -249,3 +289,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+

@@ -2,6 +2,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.repositories.task_repository import TaskRepository
 from app.repositories.task_assignment_repository import TaskAssignmentRepository
 from app.core.exceptions import NotFoundException
+from app.constants.messages import TASK_MESSAGES
+from app.constants.error_codes import TASK_NOT_FOUND
 from uuid import UUID
 
 
@@ -17,7 +19,7 @@ class TaskService:
     async def get_task(self, task_id: UUID):
         task = await self.task_repo.get_by_id(task_id)
         if not task:
-            raise NotFoundException("Task")
+            raise NotFoundException(TASK_MESSAGES["NOT_FOUND"], code=TASK_NOT_FOUND)
         return task
 
     async def list_tasks(self, project_id: UUID = None, assigned_to: UUID = None, priority: str = None, status_id: UUID = None, page: int = 1, limit: int = 20):
@@ -26,7 +28,7 @@ class TaskService:
     async def update_task(self, task_id: UUID, **kwargs):
         task = await self.task_repo.update(task_id, **kwargs)
         if not task:
-            raise NotFoundException("Task")
+            raise NotFoundException(TASK_MESSAGES["NOT_FOUND"], code=TASK_NOT_FOUND)
         return task
 
     async def assign_task(self, task_id: UUID, user_id: UUID, assigned_by: UUID, reason: str = None):

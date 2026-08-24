@@ -5,6 +5,7 @@ import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Checkbox } from '../../components/common/Checkbox';
 import { useTheme } from '../../context/ThemeContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface FormErrors {
   name?: string;
@@ -19,6 +20,7 @@ interface FormErrors {
 export default function SignupPage() {
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
+  const { signup } = useAuth();
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -39,7 +41,7 @@ export default function SignupPage() {
     if (!email) newErrors.email = 'Email is required';
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) newErrors.email = 'Invalid email format';
     if (!password) newErrors.password = 'Password is required';
-    else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
+    else if (password.length < 8) newErrors.password = 'Password must be at least 8 characters';
     if (!confirmPassword) newErrors.confirmPassword = 'Please confirm your password';
     else if (password !== confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
 
@@ -62,8 +64,12 @@ export default function SignupPage() {
     }
     setLoading(true);
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      navigate('/onboarding');
+      const result = await signup(email, password, name, hasCompany ? companyName : undefined);
+      if (result.success) {
+        navigate('/dashboard');
+      } else {
+        setErrors({ email: result.message || 'Signup failed.' });
+      }
     } finally {
       setLoading(false);
     }
@@ -110,7 +116,7 @@ export default function SignupPage() {
             <Input
               label="Password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               required
               value={password}
               onChange={e => setPassword(e.target.value)}
@@ -199,3 +205,4 @@ export default function SignupPage() {
     </div>
   );
 }
+

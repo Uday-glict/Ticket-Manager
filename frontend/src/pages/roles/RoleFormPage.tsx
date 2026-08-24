@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Checkbox } from '../../components/common/Checkbox';
-import { mockRoles } from '../../utils/mockData';
+import { roleService } from '../../services/roleService';
 import { PERMISSIONS } from '../../constants/permissions';
 
 type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -75,13 +75,23 @@ export default function RoleFormPage() {
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
 
-  const existingRole = isEditing ? mockRoles.find(r => r.id === id) : undefined;
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
 
-  const [name, setName] = useState(existingRole?.name ?? '');
-  const [description, setDescription] = useState(existingRole?.description ?? '');
-  const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(
-    new Set(existingRole?.permissions ?? [])
-  );
+  useEffect(() => {
+    if (isEditing && id) {
+      roleService.list().then(res => {
+        const existingRole = (res.data || []).find((r: any) => r.id === id);
+        if (existingRole) {
+          setName(existingRole.name);
+          setDescription(existingRole.description ?? '');
+          setSelectedPermissions(new Set(existingRole.permissions ?? []));
+        }
+      }).catch(() => {});
+    }
+  }, [id, isEditing]);
 
   const groupStates = useMemo(() => {
     return PERMISSION_GROUPS.map(group => {
@@ -119,26 +129,28 @@ export default function RoleFormPage() {
     });
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) return;
 
-    const roleData = {
-      id: isEditing ? id! : `role-${Date.now()}`,
-      name: name.trim(),
-      description: description.trim() || undefined,
-      permissions: Array.from(selectedPermissions),
-      isSystem: existingRole?.isSystem ?? false,
-      createdAt: existingRole?.createdAt ?? new Date().toISOString(),
-    };
+    setLoading(true);
+    try {
+      const roleData = {
+        name: name.trim(),
+        description: description.trim() || undefined,
+        permissions: Array.from(selectedPermissions),
+      };
 
-    if (isEditing) {
-      const idx = mockRoles.findIndex(r => r.id === id);
-      if (idx !== -1) mockRoles[idx] = roleData;
-    } else {
-      mockRoles.push(roleData);
+      if (isEditing && id) {
+        await roleService.update(id, roleData);
+      } else {
+        await roleService.create(roleData);
+      }
+
+      navigate('/roles');
+    } catch {
+    } finally {
+      setLoading(false);
     }
-
-    navigate('/roles');
   };
 
   return (
@@ -231,3 +243,4 @@ export default function RoleFormPage() {
     </div>
   );
 }
+

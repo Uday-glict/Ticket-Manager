@@ -3,6 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.db.database import get_db
 from app.dependencies.auth import get_current_active_user
+from app.core.exceptions import ForbiddenException
+from app.constants.messages import COMMON_MESSAGES, PERMISSION_MESSAGES
+from app.constants.error_codes import PERMISSION_DENIED
 from app.models.user import User
 from app.models.workspace_member import WorkspaceMember
 from app.models.project_member import ProjectMember
@@ -16,7 +19,10 @@ async def get_current_workspace_member(
     result = await db.execute(select(WorkspaceMember).where(WorkspaceMember.user_id == user.id))
     member = result.scalar_one_or_none()
     if not member:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a workspace member")
+        raise ForbiddenException(
+            message=PERMISSION_MESSAGES["FORBIDDEN"],
+            code=PERMISSION_DENIED,
+        )
     return member
 
 
@@ -27,14 +33,33 @@ def require_permission(permission: str):
     ) -> WorkspaceMember:
         if workspace_member.role in ("owner", "admin"):
             return workspace_member
+        if permission in ("projects.view", "tasks.view", "board.view", "projects.create"):
+            # allow any workspace member to view/create projects/tasks/board; data-level will filter
+            return workspace_member
+        # check project-specific roles for permission
+        result = await db.execute(select(ProjectMember).where(ProjectMember.user_id == workspace_member.user_id))
+        pms = result.scalars().all()
+        role_ids = [pm.role_id for pm in pms]
+        if role_ids:
+            result = await db.execute(select(Role).where(Role.id.in_(role_ids)))
+            for role in result.scalars().all():
+                await db.refresh(role, attribute_names=["permissions"])
+                for perm in role.permissions:
+                    if perm.name == permission:
+                        return workspace_member
+        # fallback check workspace roles (global)
         result = await db.execute(
             select(Role).join(Role.permissions).where(Role.workspace_id == workspace_member.workspace_id)
         )
         for role in result.scalars().all():
+            await db.refresh(role, attribute_names=["permissions"])
             for perm in role.permissions:
                 if perm.name == permission:
                     return workspace_member
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Permission denied: {permission}")
+        raise ForbiddenException(
+            message=PERMISSION_MESSAGES["FORBIDDEN"],
+            code=PERMISSION_DENIED,
+        )
     return checker
 
 
@@ -49,5 +74,8 @@ async def require_project_member(
     )
     member = result.scalar_one_or_none()
     if not member:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a project member")
+        raise ForbiddenException(
+            message=PERMISSION_MESSAGES["FORBIDDEN"],
+            code=PERMISSION_DENIED,
+        )
     return member

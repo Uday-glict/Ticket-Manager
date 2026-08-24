@@ -5,6 +5,8 @@ from app.schemas.project import ProjectStatusCreateRequest, ProjectStatusUpdateR
 from app.services.project_status_service import ProjectStatusService
 from app.dependencies.permissions import require_permission
 from app.models.workspace_member import WorkspaceMember
+from app.utils.response import success_response
+from app.constants.messages import PROJECT_STATUS_MESSAGES
 from uuid import UUID
 
 router = APIRouter(prefix="/projects/{project_id}/statuses", tags=["project-statuses"])
@@ -14,25 +16,34 @@ router = APIRouter(prefix="/projects/{project_id}/statuses", tags=["project-stat
 async def list_statuses(project_id: str, workspace_member: WorkspaceMember = Depends(require_permission("projects.view")), db: AsyncSession = Depends(get_db)):
     service = ProjectStatusService(db)
     statuses = await service.list_statuses(UUID(project_id))
-    return {"success": True, "data": [{"id": str(s.id), "name": s.name, "color": s.color, "display_order": s.display_order, "is_enabled": s.is_enabled} for s in statuses]}
+    return success_response(
+        data=[{"id": str(s.id), "name": s.name, "color": s.color, "display_order": s.display_order, "is_enabled": s.is_enabled} for s in statuses],
+        message=PROJECT_STATUS_MESSAGES["LIST_SUCCESS"],
+    )
 
 
 @router.post("")
 async def create_status(project_id: str, request: ProjectStatusCreateRequest, workspace_member: WorkspaceMember = Depends(require_permission("projects.update")), db: AsyncSession = Depends(get_db)):
     service = ProjectStatusService(db)
     status = await service.create_status(UUID(project_id), request.name, request.color, request.display_order)
-    return {"success": True, "data": {"id": str(status.id), "name": status.name, "color": status.color, "display_order": status.display_order}}
+    return success_response(
+        data={"id": str(status.id), "name": status.name, "color": status.color, "display_order": status.display_order},
+        message=PROJECT_STATUS_MESSAGES["CREATED"],
+    )
 
 
 @router.put("/{status_id}")
 async def update_status(project_id: str, status_id: str, request: ProjectStatusUpdateRequest, workspace_member: WorkspaceMember = Depends(require_permission("projects.update")), db: AsyncSession = Depends(get_db)):
     service = ProjectStatusService(db)
     status = await service.update_status(UUID(status_id), **request.model_dump(exclude_unset=True))
-    return {"success": True, "data": {"id": str(status.id), "name": status.name, "color": status.color, "display_order": status.display_order, "is_enabled": status.is_enabled}}
+    return success_response(
+        data={"id": str(status.id), "name": status.name, "color": status.color, "display_order": status.display_order, "is_enabled": status.is_enabled},
+        message=PROJECT_STATUS_MESSAGES["UPDATED"],
+    )
 
 
 @router.delete("/{status_id}")
 async def delete_status(project_id: str, status_id: str, workspace_member: WorkspaceMember = Depends(require_permission("projects.update")), db: AsyncSession = Depends(get_db)):
     service = ProjectStatusService(db)
     await service.delete_status(UUID(status_id))
-    return {"success": True, "message": "Status deleted"}
+    return success_response(message=PROJECT_STATUS_MESSAGES["DELETED"])

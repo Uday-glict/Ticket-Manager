@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -11,6 +11,9 @@ import {
   MessageSquare,
   ChevronRight,
   Circle,
+  Loader2,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { Tabs } from '../../components/common/Tabs';
 import { Badge } from '../../components/common/Badge';
@@ -19,8 +22,17 @@ import { Button } from '../../components/common/Button';
 import { Table, Column } from '../../components/common/Table';
 import { SearchBox } from '../../components/common/SearchBox';
 import { Select } from '../../components/common/Select';
-import { mockProjects, mockUsers, mockTasks, mockActivities, mockRoles } from '../../utils/mockData';
-import type { Task, Activity, Priority, ProjectStatus } from '../../types';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { projectService } from '../../services/projectService';
+import { taskService } from '../../services/taskService';
+import { userService } from '../../services/userService';
+import { roleService } from '../../services/roleService';
+import { auditService } from '../../services/auditService';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../api/apiClient';
+import { ROUTES } from '../../constants/routes';
+import type { Task, Activity, Priority, ProjectStatus, Project, User, Role } from '../../types';
+import { mapProject, mapTask, mapUser, mapRole, mapActivity, mapAuditLog } from '../../utils/mappers';
 
 function getStatusBadgeVariant(status: string) {
   switch (status) {
@@ -116,17 +128,17 @@ function ActionIcon({ action }: { action: string }) {
   }
 }
 
-function OverviewTab({ project }: { project: NonNullable<ReturnType<typeof mockProjects.find>> }) {
-  const manager = mockUsers.find(u => u.id === project.managerId);
+function OverviewTab({ project, users, roles, tasks }: { project: Project; users: User[]; roles: Role[]; tasks: Task[] }) {
+  const manager = users.find(u => u.id === project.managerId);
   const members = project.members
     .map(m => ({
       ...m,
-      user: mockUsers.find(u => u.id === m.userId),
-      role: mockRoles.find(r => r.id === m.roleId),
+      user: users.find(u => u.id === m.userId),
+      role: roles.find(r => r.id === m.roleId),
     }))
     .filter(m => m.user);
 
-  const projectTasks = mockTasks.filter(t => t.projectId === project.id);
+  const projectTasks = tasks.filter(t => t.projectId === project.id);
   const completedCount = projectTasks.filter(t => {
     const status = project.statuses.find(s => s.id === t.statusId);
     return status?.name.toLowerCase().includes('complet') || status?.name.toLowerCase().includes('done');
@@ -235,11 +247,11 @@ function OverviewTab({ project }: { project: NonNullable<ReturnType<typeof mockP
   );
 }
 
-function TasksTab({ project }: { project: NonNullable<ReturnType<typeof mockProjects.find>> }) {
+function TasksTab({ project, users, tasks }: { project: Project; users: User[]; tasks: Task[] }) {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const projectTasks = mockTasks.filter(t => t.projectId === project.id);
+  const projectTasks = tasks.filter(t => t.projectId === project.id);
 
   const filteredTasks = useMemo(() => {
     return projectTasks.filter(t => {
@@ -272,7 +284,7 @@ function TasksTab({ project }: { project: NonNullable<ReturnType<typeof mockProj
       key: 'assignedTo',
       header: 'Assigned To',
       render: (task) => {
-        const user = mockUsers.find(u => u.id === task.assignedTo);
+        const user = users.find(u => u.id === task.assignedTo);
         if (!user) return <span className="text-slate-400">Unassigned</span>;
         return (
           <div className="flex items-center gap-2">
@@ -349,8 +361,8 @@ function TasksTab({ project }: { project: NonNullable<ReturnType<typeof mockProj
   );
 }
 
-function BoardTab({ project }: { project: NonNullable<ReturnType<typeof mockProjects.find>> }) {
-  const projectTasks = mockTasks.filter(t => t.projectId === project.id);
+function BoardTab({ project, users, tasks }: { project: Project; users: User[]; tasks: Task[] }) {
+  const projectTasks = tasks.filter(t => t.projectId === project.id);
   const statuses = project.statuses.sort((a, b) => a.order - b.order);
 
   return (
@@ -366,7 +378,7 @@ function BoardTab({ project }: { project: NonNullable<ReturnType<typeof mockProj
             </div>
             <div className="space-y-3">
               {tasks.map(task => {
-                const assignedUser = mockUsers.find(u => u.id === task.assignedTo);
+                const assignedUser = users.find(u => u.id === task.assignedTo);
                 return (
                   <Link
                     key={task.id}
@@ -407,12 +419,12 @@ function BoardTab({ project }: { project: NonNullable<ReturnType<typeof mockProj
   );
 }
 
-function MembersTab({ project }: { project: NonNullable<ReturnType<typeof mockProjects.find>> }) {
+function MembersTab({ project, users, roles }: { project: Project; users: User[]; roles: Role[] }) {
   const members = project.members
     .map(m => ({
       ...m,
-      user: mockUsers.find(u => u.id === m.userId),
-      role: mockRoles.find(r => r.id === m.roleId),
+      user: users.find(u => u.id === m.userId),
+      role: roles.find(r => r.id === m.roleId),
     }))
     .filter(m => m.user);
 
@@ -448,9 +460,9 @@ function MembersTab({ project }: { project: NonNullable<ReturnType<typeof mockPr
   );
 }
 
-function ActivityTab({ project }: { project: NonNullable<ReturnType<typeof mockProjects.find>> }) {
-  const projectActivities = mockActivities.filter(a => {
-    return mockTasks.some(t => t.projectId === project.id && t.id === a.entityId);
+function ActivityTab({ project, users, tasks, activities }: { project: Project; users: User[]; tasks: Task[]; activities: any[] }) {
+  const projectActivities = activities.filter(a => {
+    return tasks.some(t => t.projectId === project.id && t.id === a.record);
   });
 
   const sortedActivities = [...projectActivities].sort(
@@ -470,7 +482,7 @@ function ActivityTab({ project }: { project: NonNullable<ReturnType<typeof mockP
       <div className="absolute left-6 top-0 bottom-0 w-px bg-slate-200 dark:bg-slate-700" />
       <div className="space-y-6">
         {sortedActivities.map(activity => {
-          const user = mockUsers.find(u => u.id === activity.userId);
+          const user = users.find(u => u.id === activity.userId);
           return (
             <div key={activity.id} className="relative flex gap-4">
               <div className="relative z-10 flex-shrink-0">
@@ -509,9 +521,45 @@ function ActivityTab({ project }: { project: NonNullable<ReturnType<typeof mockP
 export default function ProjectDetailsPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { success: showSuccess, error: showError } = useToast();
   const [activeTab, setActiveTab] = useState('overview');
+  const [project, setProject] = useState<Project | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showDelete, setShowDelete] = useState(false);
 
-  const project = mockProjects.find(p => p.id === id);
+  useEffect(() => {
+    if (!id) return;
+    Promise.all([
+      projectService.get(id),
+      taskService.list({ project_id: id }),
+      userService.list(),
+      roleService.list(),
+      auditService.list({ entity_type: 'tasks' }),
+    ]).then(([projectRes, tasksRes, usersRes, rolesRes, auditRes]) => {
+      const pData = projectRes.data.data || projectRes.data;
+      setProject(mapProject(pData));
+      const tData = tasksRes.data.data || tasksRes.data;
+      setTasks((Array.isArray(tData) ? tData : []).map(mapTask));
+      const uData = usersRes.data.data || usersRes.data;
+      setUsers((Array.isArray(uData) ? uData : []).map(mapUser));
+      const rData = rolesRes.data.data || rolesRes.data;
+      setRoles((Array.isArray(rData) ? rData : []).map(mapRole));
+      const aData = auditRes.data.data || auditRes.data;
+      setActivities((Array.isArray(aData) ? aData : []).map(mapAuditLog));
+    }).finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   if (!project) {
     return (
@@ -526,7 +574,7 @@ export default function ProjectDetailsPage() {
     );
   }
 
-  const projectTasks = mockTasks.filter(t => t.projectId === project.id);
+  const projectTasks = tasks.filter(t => t.projectId === project.id);
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -535,6 +583,18 @@ export default function ProjectDetailsPage() {
     { key: 'members', label: 'Members', count: project.members.length },
     { key: 'activity', label: 'Activity' },
   ];
+
+  const handleDelete = async () => {
+    if (!id) return;
+    try {
+      await projectService.delete(id);
+      showSuccess('Project deleted successfully');
+      navigate(ROUTES.DASHBOARD);
+    } catch (err: any) {
+      showError(getErrorMessage(err));
+    }
+    setShowDelete(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -550,6 +610,16 @@ export default function ProjectDetailsPage() {
             </Badge>
           </div>
         </div>
+        <Link to={`/projects/${project.id}/edit`}>
+          <Button variant="outline" size="sm">
+            <Pencil className="h-4 w-4" />
+            Edit
+          </Button>
+        </Link>
+        <Button variant="outline" size="sm" onClick={() => setShowDelete(true)} className="text-red-600 hover:bg-red-50">
+          <Trash2 className="h-4 w-4" />
+          Delete
+        </Button>
         <Link to={`/projects/${project.id}/status-config`}>
           <Button variant="outline" size="sm">
             Configure Statuses
@@ -561,12 +631,21 @@ export default function ProjectDetailsPage() {
       <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
       <div className="mt-6">
-        {activeTab === 'overview' && <OverviewTab project={project} />}
-        {activeTab === 'tasks' && <TasksTab project={project} />}
-        {activeTab === 'board' && <BoardTab project={project} />}
-        {activeTab === 'members' && <MembersTab project={project} />}
-        {activeTab === 'activity' && <ActivityTab project={project} />}
+        {activeTab === 'overview' && <OverviewTab project={project} users={users} roles={roles} tasks={tasks} />}
+        {activeTab === 'tasks' && <TasksTab project={project} users={users} tasks={tasks} />}
+        {activeTab === 'board' && <BoardTab project={project} users={users} tasks={tasks} />}
+        {activeTab === 'members' && <MembersTab project={project} users={users} roles={roles} />}
+        {activeTab === 'activity' && <ActivityTab project={project} users={users} tasks={tasks} activities={activities} />}
       </div>
+      <ConfirmDialog
+        isOpen={showDelete}
+        onClose={() => setShowDelete(false)}
+        onConfirm={handleDelete}
+        title="Delete Project"
+        message={`Are you sure you want to delete "${project.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+      />
     </div>
   );
 }
+

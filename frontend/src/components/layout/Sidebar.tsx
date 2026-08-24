@@ -1,24 +1,30 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { cn } from '../../utils/cn';
+import { useAuth } from '../../context/AuthContext';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, Columns3,
-  Users, Shield, Settings, ChevronLeft, ChevronRight, Menu
+  Users, Shield, Settings, ChevronLeft, ChevronRight, Menu,
+  UsersRound, Timer, Calendar
 } from 'lucide-react';
 
 interface NavItem {
   label: string;
   path: string;
   icon: React.ReactNode;
+  perm?: string;
 }
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
   { label: 'Projects', path: '/projects', icon: <FolderKanban className="h-5 w-5" /> },
-  { label: 'Tasks', path: '/tasks', icon: <CheckSquare className="h-5 w-5" /> },
+  { label: 'Teams', path: '/teams', icon: <UsersRound className="h-5 w-5" /> },
+  { label: 'Sprints', path: '/sprints', icon: <Timer className="h-5 w-5" /> },
+  { label: 'Tickets', path: '/tickets', icon: <CheckSquare className="h-5 w-5" /> },
   { label: 'Board', path: '/board', icon: <Columns3 className="h-5 w-5" /> },
-  { label: 'Users', path: '/users', icon: <Users className="h-5 w-5" /> },
-  { label: 'Roles', path: '/roles', icon: <Shield className="h-5 w-5" /> },
+  { label: 'Calendar', path: '/calendar', icon: <Calendar className="h-5 w-5" /> },
+  { label: 'Users', path: '/users', icon: <Users className="h-5 w-5" />, perm: 'users.manage' },
+  { label: 'Roles', path: '/roles', icon: <Shield className="h-5 w-5" />, perm: 'roles.manage' },
   { label: 'Settings', path: '/settings', icon: <Settings className="h-5 w-5" /> },
 ];
 
@@ -29,6 +35,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
+  const { hasPermission } = useAuth();
+  const visibleItems = navItems.filter(item => !item.perm || hasPermission(item.perm));
   return (
     <aside className={cn(
       'flex flex-col h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 transition-all duration-300',
@@ -37,14 +45,14 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
     )}>
       <div className="flex items-center justify-between px-4 py-4 border-b border-slate-200 dark:border-slate-700">
         {!collapsed && (
-          <span className="text-lg font-bold text-primary-500">TaskManager</span>
+          <span className="text-lg font-bold text-primary-500">Ticket Manager</span>
         )}
         <button onClick={onToggle} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </button>
       </div>
       <nav className="flex-1 p-2 space-y-1">
-        {navItems.map(item => (
+        {visibleItems.map(item => (
           <NavLink
             key={item.path}
             to={item.path}

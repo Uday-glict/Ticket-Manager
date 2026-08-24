@@ -50,3 +50,11 @@ class ProjectRepository:
                     setattr(project, key, value)
             await self.db.flush()
         return project
+
+    async def delete(self, project_id: UUID) -> bool:
+        project = await self.get_by_id(project_id)
+        if project:
+            await self.db.delete(project)
+            await self.db.flush()
+            return True
+        return False
