@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { Plus, Calendar, Edit, Trash2, Play, CheckCircle } from 'lucide-react';
 import { Button } from '../../components/common/Button';
@@ -19,6 +19,7 @@ import type { Sprint, Project, Team } from '../../types';
 export default function SprintListPage() {
   const { projectId: paramId } = useParams();
   const { success: showSuccess, error: showError } = useToast();
+  const fetchSeq = useRef(0);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState(paramId || '');
   const [teams, setTeams] = useState<Team[]>([]);
@@ -39,15 +40,17 @@ export default function SprintListPage() {
 
   const fetchSprints = useCallback(async () => {
     if (!projectId) return;
+    const seq = ++fetchSeq.current;
     setLoading(true);
     try {
       const [spRes, tmRes] = await Promise.all([
         sprintService.list(projectId),
         teamService.list(projectId).catch(() => ({ data: { data: [] } })),
       ]);
+      if (seq !== fetchSeq.current) return;
       setSprints((spRes.data.data || spRes.data || []).map(mapSprint));
       setTeams((tmRes.data.data || tmRes.data || []).map(mapTeam));
-    } catch (e) { showError(getErrorMessage(e)); } finally { setLoading(false); }
+    } catch (e) { if (seq === fetchSeq.current) showError(getErrorMessage(e)); } finally { if (seq === fetchSeq.current) setLoading(false); }
   }, [projectId]);
 
   useEffect(() => { fetchSprints(); }, [fetchSprints]);
