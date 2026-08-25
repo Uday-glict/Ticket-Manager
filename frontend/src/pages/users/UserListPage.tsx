@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Plus, Edit, UserCheck, UserX, MoreVertical } from 'lucide-react';
+import { Plus, Edit, UserCheck, UserX, MoreVertical, Eye, Trash2 } from 'lucide-react';
 import { Table, type Column } from '../../components/common/Table';
 import { Pagination } from '../../components/common/Pagination';
 import { SearchBox } from '../../components/common/SearchBox';
@@ -8,6 +8,8 @@ import { Badge } from '../../components/common/Badge';
 import { Avatar } from '../../components/common/Avatar';
 import { Button } from '../../components/common/Button';
 import { Dropdown } from '../../components/common/Dropdown';
+import { Modal } from '../../components/common/Modal';
+import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { userService } from '../../services/userService';
 import { projectService } from '../../services/projectService';
 import { roleService } from '../../services/roleService';
@@ -31,6 +33,9 @@ export default function UserListPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [viewingUser, setViewingUser] = useState<User | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -124,6 +129,21 @@ export default function UserListPage() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      const res = await userService.delete(deleteTarget.id);
+      setUsers(prev => prev.filter(u => u.id !== deleteTarget.id));
+      showSuccess((res.data as any)?.message || 'User deleted successfully');
+      setDeleteTarget(null);
+    } catch (err: any) {
+      showError(getErrorMessage(err));
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleSave = async (userData: Partial<User> & { projectRoles?: Record<string, string>; avatarFile?: File | null; password?: string }) => {
     try {
       if (editingUser) {
@@ -149,13 +169,16 @@ export default function UserListPage() {
           }
         }
       } else {
+        if (!userData.name?.trim() || !userData.email?.trim() || !(userData as any).password) {
+          showError('Name, email and password are required');
+          return;
+        }
         const fd = new FormData();
-        fd.append('name', userData.name || '');
-        fd.append('email', userData.email || '');
-        if ((userData as any).password) fd.append('password', (userData as any).password);
-        else fd.append('password', 'TempPass123!');
+        fd.append('name', userData.name.trim());
+        fd.append('email', userData.email.trim());
+        fd.append('password', (userData as any).password);
         if (userData.avatarFile) fd.append('avatar', userData.avatarFile);
-        const res = await userService.create(fd as any);
+        const res = await userService.create(fd);
         const created = res.data.data || res.data;
         const newUser: User = {
           id: created.id,
@@ -247,6 +270,11 @@ export default function UserListPage() {
           }
           items={[
             {
+              label: 'View',
+              icon: <Eye className="h-4 w-4" />,
+              onClick: () => setViewingUser(u),
+            },
+            {
               label: 'Edit',
               icon: <Edit className="h-4 w-4" />,
               onClick: () => {
@@ -258,6 +286,12 @@ export default function UserListPage() {
               label: u.status === 'active' ? 'Deactivate' : 'Activate',
               icon: u.status === 'active' ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />,
               onClick: () => handleToggleStatus(u.id),
+            },
+            {
+              label: 'Delete',
+              icon: <Trash2 className="h-4 w-4" />,
+              danger: true,
+              onClick: () => setDeleteTarget(u),
             },
           ]}
         />
@@ -338,6 +372,56 @@ export default function UserListPage() {
         }}
         user={editingUser}
         onSave={handleSave}
+      />
+
+      <Modal isOpen={!!viewingUser} onClose={() => setViewingUser(null)} title="User Details">
+        {viewingUser && (
+          <div className="space-y-5">
+            <div className="flex items-center gap-4">
+              <Avatar src={viewingUser.avatar} name={viewingUser.name} size="lg" className="h-16 w-16 text-lg" />
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{viewingUser.name}</h3>
+                <p className="text-sm text-slate-500">{viewingUser.email}</p>
+                <Badge variant={viewingUser.status === 'active' ? 'success' : 'danger'} className="mt-1">
+                  {viewingUser.status === 'active' ? 'Active' : 'Inactive'}
+                </Badge>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-slate-500">Projects</span>
+                <p className="font-medium text-slate-900 dark:text-white">{getUserProjects(viewingUser.id).map(p => p.name).join(', ') || 'None'}</p>
+              </div>
+              <div>
+                <span className="text-slate-500">Roles</span>
+                <p className="font-medium text-slate-900 dark:text-white">{getUserRoles(viewingUser.id).join(', ') || 'None'}</p>
+              </div>
+              <div>
+                <span className="text-slate-500">Created</span>
+                <p className="font-medium text-slate-900 dark:text-white">{new Date(viewingUser.createdAt).toLocaleDateString()}</p>
+              </div>
+              {viewingUser.lastLogin && (
+                <div>
+                  <span className="text-slate-500">Last Login</span>
+                  <p className="font-medium text-slate-900 dark:text-white">{new Date(viewingUser.lastLogin).toLocaleString()}</p>
+                </div>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setViewingUser(null)}>Close</Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete User"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        loading={deleteLoading}
       />
     </div>
   );

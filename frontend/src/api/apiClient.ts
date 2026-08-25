@@ -19,6 +19,9 @@ const processQueue = (error: AxiosError | null, token: string | null = null) => 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = localStorage.getItem('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (config.data instanceof FormData && config.headers['Content-Type']) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

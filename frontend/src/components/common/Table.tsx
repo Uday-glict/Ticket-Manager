@@ -38,7 +38,8 @@ export function Table<T extends Record<string, any>>({
   }
 
   return (
-    <div className={cn('overflow-x-auto', className)}>
+    <div className={cn('overflow-visible', className)}>
+      <div className="overflow-x-auto">
       <table className="w-full">
         <thead>
           <tr className="border-b border-slate-200 dark:border-slate-700">
@@ -77,6 +78,7 @@ export function Table<T extends Record<string, any>>({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

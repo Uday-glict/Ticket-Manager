@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, ReactNode } from 'react';
 import { cn } from '../../utils/cn';
-import { ChevronDown } from 'lucide-react';
 
 interface DropdownItem {
   label: string;
@@ -18,22 +17,40 @@ interface DropdownProps {
 export function Dropdown({ trigger, items, className }: DropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (ref.current?.contains(t)) return;
+      if (menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
+    const handleEsc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEsc);
+    return () => { document.removeEventListener('mousedown', handleClickOutside); document.removeEventListener('keydown', handleEsc); };
   }, []);
+
+  const toggle = () => {
+    if (!open && ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    }
+    setOpen(v => !v);
+  };
 
   return (
     <div ref={ref} className="relative inline-block">
-      <div onClick={() => setOpen(!open)} className="cursor-pointer">
+      <div onClick={toggle} onMouseDown={e => e.stopPropagation()} className="cursor-pointer">
         {trigger}
       </div>
-      {open && (
-        <div className={cn('absolute right-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 py-1 animate-fade-in', className)}>
+      {open && pos && (
+        <div
+          ref={menuRef}
+          style={{ top: pos.top, right: pos.right, position: 'fixed' }}
+          className={cn('w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-[60] py-1 animate-fade-in', className)}>
           {items.map((item, idx) => (
             <button
               key={idx}
