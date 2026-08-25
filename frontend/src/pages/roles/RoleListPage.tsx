@@ -7,24 +7,30 @@ import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyState } from '../../components/common/EmptyState';
 import { roleService } from '../../services/roleService';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../api/apiClient';
 import type { Role } from '../../types';
 import { mapRole } from '../../utils/mappers';
 
 export default function RoleListPage() {
   const navigate = useNavigate();
+  const { success: showSuccess, error: showError } = useToast();
   const [roles, setRoles] = useState<Role[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
 
   useEffect(() => {
-    roleService.list().then(res => setRoles((res.data.data || res.data || []).map(mapRole))).catch(() => {});
+    roleService.list().then(res => setRoles((res.data.data || res.data || []).map(mapRole))).catch(e => showError(getErrorMessage(e)));
   }, []);
 
   const handleDelete = async () => {
     if (deleteTarget) {
       try {
-        await roleService.delete(deleteTarget.id);
+        const res = await roleService.delete(deleteTarget.id);
         setRoles(prev => prev.filter(r => r.id !== deleteTarget.id));
-      } catch {}
+        showSuccess((res.data as any)?.message || 'Role deleted successfully');
+      } catch (err: any) {
+        showError(getErrorMessage(err));
+      }
       setDeleteTarget(null);
     }
   };
