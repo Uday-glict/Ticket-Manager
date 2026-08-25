@@ -16,6 +16,23 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    try:
+        from app.db.database import async_session_factory
+        from app.models.permission import Permission
+        from app.constants.permissions import Permissions
+        from sqlalchemy import select
+        async with async_session_factory() as session:
+            result = await session.execute(select(Permission.name))
+            existing_names = {row[0] for row in result.all()}
+            missing = [n for n in Permissions.ALL if n not in existing_names]
+            if missing:
+                for name in missing:
+                    group = name.split(".")[0] if "." in name else "general"
+                    session.add(Permission(name=name, group_name=group))
+                await session.commit()
+                logger.info("Seeded %d missing permissions", len(missing))
+    except Exception:
+        logger.exception("Permission seeding failed")
     yield
 
 
