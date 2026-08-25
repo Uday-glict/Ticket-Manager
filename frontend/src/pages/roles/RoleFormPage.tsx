@@ -4,134 +4,89 @@ import { ArrowLeft, Save } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Input } from '../../components/common/Input';
 import { Checkbox } from '../../components/common/Checkbox';
-import { roleService } from '../../services/roleService';
-import { PERMISSIONS } from '../../constants/permissions';
-
-type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+import { roleService, permissionService } from '../../services/roleService';
+import { useToast } from '../../context/ToastContext';
+import { getErrorMessage } from '../../api/apiClient';
 
 interface PermissionGroup {
   label: string;
-  permissions: { id: PermissionKey; label: string }[];
+  permissions: { id: string; label: string }[];
 }
-
-const PERMISSION_GROUPS: PermissionGroup[] = [
-  {
-    label: 'Project Management',
-    permissions: [
-      { id: PERMISSIONS.VIEW_PROJECT, label: 'View' },
-      { id: PERMISSIONS.CREATE_PROJECT, label: 'Create' },
-      { id: PERMISSIONS.UPDATE_PROJECT, label: 'Update' },
-      { id: PERMISSIONS.DELETE_PROJECT, label: 'Delete' },
-    ],
-  },
-  {
-    label: 'Task Management',
-    permissions: [
-      { id: PERMISSIONS.VIEW_TASK, label: 'View' },
-      { id: PERMISSIONS.CREATE_TASK, label: 'Create' },
-      { id: PERMISSIONS.ASSIGN_TASK, label: 'Assign' },
-      { id: PERMISSIONS.REASSIGN_TASK, label: 'Reassign' },
-      { id: PERMISSIONS.UPDATE_TASK, label: 'Update' },
-      { id: PERMISSIONS.DELETE_TASK, label: 'Delete' },
-    ],
-  },
-  {
-    label: 'Board',
-    permissions: [
-      { id: PERMISSIONS.VIEW_BOARD, label: 'View' },
-      { id: PERMISSIONS.MOVE_TASK, label: 'Move Task' },
-    ],
-  },
-  {
-    label: 'Comments',
-    permissions: [
-      { id: PERMISSIONS.ADD_COMMENT, label: 'Add' },
-      { id: PERMISSIONS.REPLY_COMMENT, label: 'Reply' },
-    ],
-  },
-  {
-    label: 'User Management',
-    permissions: [
-      { id: PERMISSIONS.MANAGE_USERS, label: 'Manage Users' },
-    ],
-  },
-  {
-    label: 'Role Management',
-    permissions: [
-      { id: PERMISSIONS.MANAGE_ROLES, label: 'Manage Roles' },
-    ],
-  },
-  {
-    label: 'Settings',
-    permissions: [
-      { id: PERMISSIONS.VIEW_AUDIT_LOG, label: 'View Audit Log' },
-      { id: PERMISSIONS.MANAGE_SETTINGS, label: 'Manage Settings' },
-    ],
-  },
-];
 
 export default function RoleFormPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const isEditing = !!id;
+  const { success: showSuccess, error: showError } = useToast();
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<Set<string>>(new Set());
+  const [availablePerms, setAvailablePerms] = useState<{ id: string; label: string; group: string }[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    permissionService.list().then(res => {
+      const list = res.data.data || res.data || [];
+      setAvailablePerms(list.map((p: any) => ({ id: p.name, label: p.name, group: p.group_name || 'General' })));
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (isEditing && id) {
       roleService.list().then(res => {
-        const existingRole = (res.data || []).find((r: any) => r.id === id);
+        const list = res.data.data || res.data || [];
+        const existingRole = list.find((r: any) => r.id === id);
         if (existingRole) {
           setName(existingRole.name);
           setDescription(existingRole.description ?? '');
           setSelectedPermissions(new Set(existingRole.permissions ?? []));
         }
-      }).catch(() => {});
+      }).catch(e => showError(getErrorMessage(e)));
     }
   }, [id, isEditing]);
 
+  const permissionGroups = useMemo(() => {
+    const groups: Record<string, { id: string; label: string }[]> = {};
+    for (const p of availablePerms) {
+      if (!groups[p.group]) groups[p.group] = [];
+      groups[p.group].push({ id: p.id, label: p.label });
+    }
+    return Object.entries(groups).map(([label, permissions]) => ({ label, permissions }));
+  }, [availablePerms]);
+
   const groupStates = useMemo(() => {
-    return PERMISSION_GROUPS.map(group => {
+    return permissionGroups.map(group => {
       const allSelected = group.permissions.every(p => selectedPermissions.has(p.id));
       const someSelected = group.permissions.some(p => selectedPermissions.has(p.id));
       return { allSelected, someSelected };
     });
-  }, [selectedPermissions]);
+  }, [permissionGroups, selectedPermissions]);
 
   const togglePermission = (id: string) => {
     setSelectedPermissions(prev => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
   const toggleGroup = (groupIndex: number) => {
-    const group = PERMISSION_GROUPS[groupIndex];
+    const group = permissionGroups[groupIndex];
     const allSelected = group.permissions.every(p => selectedPermissions.has(p.id));
     setSelectedPermissions(prev => {
       const next = new Set(prev);
       group.permissions.forEach(p => {
-        if (allSelected) {
-          next.delete(p.id);
-        } else {
-          next.add(p.id);
-        }
+        if (allSelected) next.delete(p.id);
+        else next.add(p.id);
       });
       return next;
     });
   };
 
   const handleSave = async () => {
-    if (!name.trim()) return;
-
+    if (!name.trim()) { showError('Role name is required'); return; }
     setLoading(true);
     try {
       const roleData = {
@@ -139,15 +94,13 @@ export default function RoleFormPage() {
         description: description.trim() || undefined,
         permissions: Array.from(selectedPermissions),
       };
-
-      if (isEditing && id) {
-        await roleService.update(id, roleData);
-      } else {
-        await roleService.create(roleData);
-      }
-
+      const res = isEditing && id
+        ? await roleService.update(id, roleData)
+        : await roleService.create(roleData);
+      showSuccess((res.data as any)?.message || (isEditing ? 'Role updated successfully' : 'Role created successfully'));
       navigate('/roles');
-    } catch {
+    } catch (err: any) {
+      showError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -187,7 +140,8 @@ export default function RoleFormPage() {
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Permissions</h2>
 
         <div className="space-y-6 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-6">
-          {PERMISSION_GROUPS.map((group, gi) => (
+          {availablePerms.length === 0 ? <p className="text-sm text-slate-400">Loading permissions...</p> : null}
+          {permissionGroups.map((group, gi) => (
             <div key={group.label} className="space-y-3">
               <div className="flex items-center gap-3">
                 <div className="relative flex items-center">
@@ -200,7 +154,7 @@ export default function RoleFormPage() {
                     onChange={() => toggleGroup(gi)}
                     className="peer sr-only"
                   />
-                  <div className="w-5 h-5 rounded border-2 border-slate-300 dark:border-slate-600 transition-colors duration-200 cursor-pointer peer-checked:bg-primary-500 peer-checked:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-500">
+                  <div onClick={() => toggleGroup(gi)} className="w-5 h-5 rounded border-2 border-slate-300 dark:border-slate-600 transition-colors duration-200 cursor-pointer peer-checked:bg-primary-500 peer-checked:border-primary-500 peer-focus:ring-2 peer-focus:ring-primary-500">
                     {(groupStates[gi].allSelected || groupStates[gi].someSelected) && (
                       <svg className="h-3.5 w-3.5 text-white absolute top-0.5 left-0.5" viewBox="0 0 14 14" fill="none">
                         {groupStates[gi].allSelected ? (

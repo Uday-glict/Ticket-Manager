@@ -41,10 +41,20 @@ class RoleService:
         if role.is_system:
             raise ForbiddenException(ROLE_MESSAGES["CANNOT_MODIFY_SYSTEM"], code=ROLE_CANNOT_MODIFY_SYSTEM)
         if name:
+            existing = await self.db.execute(select(Role).where(Role.workspace_id == role.workspace_id, Role.name == name, Role.id != role_id))
+            if existing.scalar_one_or_none():
+                raise ConflictException(ROLE_MESSAGES["ALREADY_EXISTS"], code=ROLE_ALREADY_EXISTS)
             role.name = name
         if description is not None:
             role.description = description
+        if permissions is not None:
+            from app.models.role_permission import RolePermission
+            from sqlalchemy import delete
+            await self.db.execute(delete(RolePermission).where(RolePermission.role_id == role_id))
+            if permissions:
+                await self.role_repo.add_permissions(role, permissions)
         await self.db.flush()
+        await self.db.refresh(role, attribute_names=["permissions"])
         return role
 
     async def delete_role(self, role_id: UUID):

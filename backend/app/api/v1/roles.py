@@ -15,10 +15,11 @@ router = APIRouter(prefix="/roles", tags=["roles"])
 async def list_roles(workspace_member: WorkspaceMember = Depends(require_permission("roles.manage")), db: AsyncSession = Depends(get_db)):
     service = RoleService(db)
     roles = await service.list_roles(workspace_member.workspace_id)
-    return success_response(
-        data=[{"id": str(r.id), "name": r.name, "description": r.description, "is_system": r.is_system} for r in roles],
-        message=ROLE_MESSAGES["LIST_SUCCESS"],
-    )
+    result = []
+    for r in roles:
+        await db.refresh(r, attribute_names=["permissions"])
+        result.append({"id": str(r.id), "name": r.name, "description": r.description, "is_system": r.is_system, "permissions": [p.name for p in r.permissions]})
+    return success_response(data=result, message=ROLE_MESSAGES["LIST_SUCCESS"])
 
 
 @router.post("")

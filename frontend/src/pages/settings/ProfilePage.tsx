@@ -1,55 +1,75 @@
-import { useState } from 'react';
-import { User as UserIcon, Save } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { User as UserIcon, Save, Eye, EyeOff } from 'lucide-react';
 import { Input } from '../../components/common/Input';
 import { Button } from '../../components/common/Button';
 import { Avatar } from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
+import { userService } from '../../services/userService';
+import { getErrorMessage } from '../../api/apiClient';
 
 export default function ProfilePage() {
   const { user } = useAuth();
-  const { success: showSuccess } = useToast();
+  const { success: showSuccess, error: showError } = useToast();
   const [name, setName] = useState(user?.name ?? '');
   const [email, setEmail] = useState(user?.email ?? '');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState('');
 
+  useEffect(() => {
+    if (user) { setName(user.name); setEmail(user.email); }
+  }, [user?.id]);
+
   if (!user) return null;
 
-  const initials = user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-
   const handleSaveProfile = async () => {
+    if (!name.trim()) { showError('Name is required'); return; }
     setSaving(true);
-    await new Promise(r => setTimeout(r, 400));
-    setSaving(false);
-    showSuccess('Profile updated successfully.');
+    try {
+      const res = await userService.update(user.id, { name: name.trim(), email: email.trim() });
+      showSuccess((res.data as any)?.message || 'Profile updated successfully.');
+    } catch (err: any) {
+      showError(getErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleChangePassword = async () => {
     setPwError('');
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setPwError('All fields are required.');
+      setPwError('All password fields are required.');
       return;
     }
     if (newPassword !== confirmPassword) {
       setPwError('New passwords do not match.');
       return;
     }
-    if (newPassword.length < 6) {
-      setPwError('New password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      setPwError('New password must be at least 8 characters.');
       return;
     }
     setPwSaving(true);
-    await new Promise(r => setTimeout(r, 400));
-    setPwSaving(false);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    showSuccess('Password changed successfully.');
+    try {
+      const res = await userService.update(user.id, { password: newPassword } as any);
+      showSuccess((res.data as any)?.message || 'Password changed successfully.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      const msg = getErrorMessage(err);
+      setPwError(msg);
+      showError(msg);
+    } finally {
+      setPwSaving(false);
+    }
   };
 
   return (
@@ -113,27 +133,27 @@ export default function ProfilePage() {
         )}
 
         <div className="space-y-4 max-w-sm">
-          <Input
-            label="Current Password"
-            type="password"
-            value={currentPassword}
-            onChange={e => setCurrentPassword(e.target.value)}
-            placeholder="Enter current password"
-          />
-          <Input
-            label="New Password"
-            type="password"
-            value={newPassword}
-            onChange={e => setNewPassword(e.target.value)}
-            placeholder="Enter new password"
-          />
-          <Input
-            label="Confirm New Password"
-            type="password"
-            value={confirmPassword}
-            onChange={e => setConfirmPassword(e.target.value)}
-            placeholder="Confirm new password"
-          />
+          <div className="w-full">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Current Password</label>
+            <div className="relative">
+              <input type={showCurrentPw ? 'text' : 'password'} value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} placeholder="Enter current password" className="w-full px-3 py-2 pr-10 rounded-lg border bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 border-slate-300 dark:border-slate-600" />
+              <button type="button" onClick={() => setShowCurrentPw(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" tabIndex={-1}>{showCurrentPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+            </div>
+          </div>
+          <div className="w-full">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">New Password</label>
+            <div className="relative">
+              <input type={showNewPw ? 'text' : 'password'} value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Enter new password" className="w-full px-3 py-2 pr-10 rounded-lg border bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 border-slate-300 dark:border-slate-600" />
+              <button type="button" onClick={() => setShowNewPw(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" tabIndex={-1}>{showNewPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+            </div>
+          </div>
+          <div className="w-full">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Confirm New Password</label>
+            <div className="relative">
+              <input type={showConfirmPw ? 'text' : 'password'} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm new password" className="w-full px-3 py-2 pr-10 rounded-lg border bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 border-slate-300 dark:border-slate-600" />
+              <button type="button" onClick={() => setShowConfirmPw(v => !v)} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500" tabIndex={-1}>{showConfirmPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+            </div>
+          </div>
         </div>
 
         <div className="flex justify-end">
