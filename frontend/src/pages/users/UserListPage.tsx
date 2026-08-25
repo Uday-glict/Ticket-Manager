@@ -169,14 +169,10 @@ export default function UserListPage() {
           }
         }
       } else {
-        if (!userData.name?.trim() || !userData.email?.trim() || !(userData as any).password) {
-          showError('Name, email and password are required');
-          return;
-        }
         const fd = new FormData();
-        fd.append('name', userData.name.trim());
-        fd.append('email', userData.email.trim());
-        fd.append('password', (userData as any).password);
+        fd.append('name', (userData.name || '').trim());
+        fd.append('email', (userData.email || '').trim());
+        fd.append('password', (userData as any).password || '');
         if (userData.avatarFile) fd.append('avatar', userData.avatarFile);
         const res = await userService.create(fd);
         const created = res.data.data || res.data;

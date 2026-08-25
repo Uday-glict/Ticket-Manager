@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = '["http://localhost:5173"]'
     ENVIRONMENT: str = "development"
     MAX_AVATAR_SIZE_MB: int = 5
-    ALLOWED_AVATAR_TYPES: str = '["image/jpeg","image/png","image/webp"]'
+    ALLOWED_AVATAR_TYPES: str = '["image/jpeg","image/jpg","image/png","image/gif","image/webp","image/bmp","image/x-ms-bmp","image/svg+xml","image/tiff","image/x-tiff","image/avif","image/heic","image/heif","image/x-icon","image/vnd.microsoft.icon","image/apng"]'
     AVATAR_STORAGE_DIR: str = "uploads/avatars"
 
     @property

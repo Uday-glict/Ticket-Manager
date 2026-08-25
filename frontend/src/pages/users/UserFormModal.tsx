@@ -113,11 +113,7 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isEdit) {
-      if (!password) { setPasswordError('Password is required'); return; }
-      if (password.length < 8) { setPasswordError('Password must be at least 8 characters'); return; }
-      if (password !== confirmPassword) { setPasswordError('Passwords do not match'); return; }
-    }
+    if (!isEdit && password !== confirmPassword) { setPasswordError('Passwords do not match'); return; }
     setPasswordError('');
     onSave({
       name,
@@ -142,8 +138,8 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
           <Avatar src={avatarPreview || user?.avatar} name={name || 'New User'} size="lg" className="h-16 w-16 text-lg" />
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Avatar</label>
-            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleAvatarChange} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer" />
-            <p className="text-xs text-slate-400 mt-1">JPG, PNG, WEBP up to 5MB</p>
+            <input type="file" accept="image/*" onChange={handleAvatarChange} className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 cursor-pointer" />
+            <p className="text-xs text-slate-400 mt-1">All image formats supported (JPG, PNG, GIF, WEBP, BMP, SVG, TIFF, AVIF, HEIC, ICO) up to 5MB</p>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
