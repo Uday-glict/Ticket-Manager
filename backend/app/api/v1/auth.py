@@ -41,11 +41,29 @@ async def refresh(request: RefreshRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/logout")
 async def logout(
     request: RefreshRequest,
-    current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    service = AuthService(db)
-    await service.logout(user_id=current_user.id, refresh_token_str=request.refresh_token)
+    from app.core.security import decode_token, hash_token
+    from app.models.refresh_token import RefreshToken
+    from sqlalchemy import select
+    from uuid import UUID
+    payload = decode_token(request.refresh_token)
+    if payload and payload.get("type") == "refresh" and payload.get("sub"):
+        try:
+            user_id = UUID(payload["sub"])
+            result = await db.execute(
+                select(RefreshToken).where(
+                    RefreshToken.user_id == user_id,
+                    RefreshToken.token_hash == hash_token(request.refresh_token),
+                )
+            )
+            token = result.scalar_one_or_none()
+            if token:
+                from app.utils.datetime import utcnow
+                token.revoked_at = utcnow()
+                await db.flush()
+        except Exception:
+            pass
     return success_response(message=AUTH_MESSAGES["LOGOUT_SUCCESS"])
 
 

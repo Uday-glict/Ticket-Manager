@@ -93,7 +93,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (refreshToken) {
       authService.logout(refreshToken).catch(() => {});
     }
-    localStorage.clear();
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
     setUser(null);
     setRole(null);
     setPermissions([]);
