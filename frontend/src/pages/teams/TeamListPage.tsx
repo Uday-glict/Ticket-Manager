@@ -10,6 +10,9 @@ import { Avatar } from '../../components/common/Avatar';
 import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyState } from '../../components/common/EmptyState';
+import { SearchBox } from '../../components/common/SearchBox';
+import { DataToolbar } from '../../components/common/DataToolbar';
+import { ViewToggle, type ViewMode } from '../../components/common/ViewToggle';
 import { projectService } from '../../services/projectService';
 import { userService } from '../../services/userService';
 import { teamService } from '../../services/teamService';
@@ -33,6 +36,8 @@ export default function TeamListPage() {
   const [viewTeam, setViewTeam] = useState<Team | null>(null);
   const [viewMembers, setViewMembers] = useState<User[]>([]);
   const [form, setForm] = useState({ name: '', description: '', memberIds: [] as string[] });
+  const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   useEffect(() => {
     Promise.all([projectService.list(), userService.list().catch(() => ({ data: { data: [] } }))]).then(([pRes, uRes]) => {
@@ -133,45 +138,88 @@ export default function TeamListPage() {
   const project = projects.find(p => p.id === projectId);
   const userOptions = users.map(u => ({ value: u.id, label: u.name }));
 
+  const filtered = teams.filter(t => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return t.name.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q);
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Teams</h1>
-          <p className="text-sm text-slate-500">Project: {project?.name || '—'}</p>
-        </div>
-        <div className="flex gap-3">
-          <Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => setProjectId(e.target.value)} className="w-56" />
-          <Button onClick={openCreate}><Plus className="h-4 w-4" />Create Team</Button>
-        </div>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Teams</h1>
+      <p className="text-sm text-slate-500">Project: {project?.name || '—'}</p>
+
+      <DataToolbar
+        search={<SearchBox value={search} onChange={setSearch} placeholder="Search teams..." />}
+        filters={<Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => setProjectId(e.target.value)} className="w-56" />}
+        actions={<Button onClick={openCreate}><Plus className="h-4 w-4" />Create Team</Button>}
+      />
+
+      <div className="flex justify-end">
+        <ViewToggle value={viewMode} onChange={setViewMode} options={['grid', 'table']} />
       </div>
 
       {loading ? <div className="py-20 text-center text-slate-400">Loading teams...</div> :
-        teams.length === 0 ? <EmptyState title="No teams" description="Create your first team" /> :
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {teams.map(team => (
-            <div key={team.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white">{team.name}</h3>
-                  <p className="text-sm text-slate-500 line-clamp-2">{team.description || 'No description'}</p>
-                </div>
-                <Badge variant="success">{team.status}</Badge>
-              </div>
-              <div className="flex -space-x-2">
-                {team.memberIds.slice(0, 5).map(id => { const u = userById(id); return <Avatar key={id} name={u?.name || id} src={u?.avatar} size="sm" className="ring-2 ring-white" />; })}
-                {team.memberIds.length > 5 && <span className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs">+{team.memberIds.length - 5}</span>}
-                <span className="ml-3 text-sm text-slate-500 flex items-center gap-1"><Users className="h-4 w-4" />{team.memberIds.length} Members</span>
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={() => openView(team)}>View</Button>
-                <Button variant="ghost" size="sm" onClick={() => openEdit(team)}><Edit className="h-4 w-4" /></Button>
-                <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(team)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-              </div>
+        filtered.length === 0 ? <EmptyState title="No teams" description="Create your first team" /> :
+        viewMode === 'table' ? (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Members</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                    <th className="w-24"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {filtered.map(team => (
+                    <tr key={team.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-900 dark:text-white">{team.name}</p>
+                        <p className="text-xs text-slate-500 truncate max-w-[240px]">{team.description || 'No description'}</p>
+                      </td>
+                      <td className="px-4 py-3"><span className="flex items-center gap-1 text-sm text-slate-500"><Users className="h-4 w-4" />{team.memberIds.length}</span></td>
+                      <td className="px-4 py-3"><Badge variant="success">{team.status}</Badge></td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openView(team)}>View</Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(team)}><Edit className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(team)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
-      }
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {filtered.map(team => (
+              <div key={team.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-slate-900 dark:text-white">{team.name}</h3>
+                    <p className="text-sm text-slate-500 line-clamp-2">{team.description || 'No description'}</p>
+                  </div>
+                  <Badge variant="success">{team.status}</Badge>
+                </div>
+                <div className="flex -space-x-2">
+                  {team.memberIds.slice(0, 5).map(id => { const u = userById(id); return <Avatar key={id} name={u?.name || id} src={u?.avatar} size="sm" className="ring-2 ring-white" />; })}
+                  {team.memberIds.length > 5 && <span className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-xs">+{team.memberIds.length - 5}</span>}
+                  <span className="ml-3 text-sm text-slate-500 flex items-center gap-1"><Users className="h-4 w-4" />{team.memberIds.length} Members</span>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => openView(team)}>View</Button>
+                  <Button variant="ghost" size="sm" onClick={() => openEdit(team)}><Edit className="h-4 w-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(team)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
       <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title={editing ? 'Edit Team' : 'Create Team'}>
         <div className="space-y-4">

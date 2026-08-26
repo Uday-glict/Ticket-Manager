@@ -6,6 +6,9 @@ import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { EmptyState } from '../../components/common/EmptyState';
+import { SearchBox } from '../../components/common/SearchBox';
+import { DataToolbar } from '../../components/common/DataToolbar';
+import { ViewToggle, type ViewMode } from '../../components/common/ViewToggle';
 import { roleService } from '../../services/roleService';
 import { useToast } from '../../context/ToastContext';
 import { getErrorMessage } from '../../api/apiClient';
@@ -17,6 +20,8 @@ export default function RoleListPage() {
   const { success: showSuccess, error: showError } = useToast();
   const [roles, setRoles] = useState<Role[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
+  const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   useEffect(() => {
     roleService.list().then(res => setRoles((res.data.data || res.data || []).map(mapRole))).catch(e => showError(getErrorMessage(e)));
@@ -96,23 +101,59 @@ export default function RoleListPage() {
     },
   ];
 
+  const filtered = roles.filter(r => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return r.name.toLowerCase().includes(q) || (r.description || '').toLowerCase().includes(q);
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Roles</h1>
-        <Button onClick={() => navigate('/roles/create')}>
-          <Plus className="h-4 w-4" />
-          Create Role
-        </Button>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Roles</h1>
+
+      <DataToolbar
+        search={<SearchBox value={search} onChange={setSearch} placeholder="Search roles..." />}
+        actions={
+          <Button onClick={() => navigate('/roles/create')}>
+            <Plus className="h-4 w-4" />
+            Create Role
+          </Button>
+        }
+      />
+
+      <div className="flex justify-end">
+        <ViewToggle value={viewMode} onChange={setViewMode} />
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
-        {roles.length === 0 ? (
-          <EmptyState title="No roles found" description="Create your first role to get started." />
-        ) : (
-          <Table columns={columns} data={roles} emptyMessage="No roles found" />
-        )}
-      </div>
+      {viewMode === 'table' ? (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+          {filtered.length === 0 ? (
+            <EmptyState title="No roles found" description="Create your first role to get started." />
+          ) : (
+            <Table columns={columns} data={filtered} emptyMessage="No roles found" />
+          )}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.length === 0 ? (
+            <div className="col-span-full py-12 text-center text-slate-500 dark:text-slate-400">No roles found</div>
+          ) : (
+            filtered.map(r => (
+              <div key={r.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-3">
+                <div className="flex items-start justify-between">
+                  <span className="font-medium text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                    {r.isSystem && <Lock className="h-4 w-4 text-slate-400" />}
+                    {r.name}
+                  </span>
+                  <Badge variant={r.isSystem ? 'info' : 'default'}>{r.isSystem ? 'System' : 'Custom'}</Badge>
+                </div>
+                <p className="text-sm text-slate-500 line-clamp-2">{r.description || 'No description'}</p>
+                <p className="text-xs text-slate-500">{r.permissions.length} permissions</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       <ConfirmDialog
         isOpen={!!deleteTarget}

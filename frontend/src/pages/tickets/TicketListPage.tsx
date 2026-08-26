@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Plus, Search } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '../../components/common/Button';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
@@ -10,6 +10,9 @@ import { DatePicker } from '../../components/common/DatePicker';
 import { Badge } from '../../components/common/Badge';
 import { Avatar } from '../../components/common/Avatar';
 import { Table } from '../../components/common/Table';
+import { SearchBox } from '../../components/common/SearchBox';
+import { DataToolbar } from '../../components/common/DataToolbar';
+import { ViewToggle, type ViewMode } from '../../components/common/ViewToggle';
 import { ticketService } from '../../services/ticketService';
 import { projectService } from '../../services/projectService';
 import { teamService } from '../../services/teamService';
@@ -36,6 +39,7 @@ export default function TicketListPage() {
   const [search, setSearch] = useState('');
   const [filterTeam, setFilterTeam] = useState('');
   const [filterSprint, setFilterSprint] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -145,27 +149,53 @@ export default function TicketListPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Tickets</h1>
-          <p className="text-sm text-slate-500">Project: {project?.name || '—'}</p>
-        </div>
-        <div className="flex gap-3">
-          <Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => { setProjectId(e.target.value); setFilterTeam(''); setFilterSprint(''); }} className="w-56" />
-          <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create Ticket</Button>
-        </div>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Tickets</h1>
+      <p className="text-sm text-slate-500">Project: {project?.name || '—'}</p>
+
+      <DataToolbar
+        search={<SearchBox value={search} onChange={setSearch} placeholder="Search tickets..." />}
+        filters={
+          <>
+            <Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => { setProjectId(e.target.value); setFilterTeam(''); setFilterSprint(''); }} className="w-48" />
+            <Select options={[{ value: '', label: 'All Teams' }, ...teamOptions]} value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="w-40" />
+            <Select options={[{ value: '', label: 'All Sprints' }, ...sprintOptions]} value={filterSprint} onChange={e => setFilterSprint(e.target.value)} className="w-40" />
+          </>
+        }
+        actions={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create Ticket</Button>}
+      />
+
+      <div className="flex justify-end">
+        <ViewToggle value={viewMode} onChange={setViewMode} options={['table', 'grid']} />
       </div>
-      <div className="flex gap-3 flex-wrap">
-        <div className="flex-1 max-w-md relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search tickets..." className="w-full pl-10 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 text-sm" />
+      {viewMode === 'grid' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {loading ? <div className="col-span-full p-8 text-center text-sm text-slate-500">Loading tickets...</div> :
+            filtered.length === 0 ? <div className="col-span-full py-12 text-center text-slate-500">No tickets found</div> :
+            filtered.map(t => {
+              const statusObj = project?.statuses.find(x => x.id === t.statusId);
+              return (
+                <div key={t.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <span className="font-mono text-xs font-semibold text-primary-600">{t.ticketKey || t.id.slice(0, 8)}</span>
+                    <Badge variant={t.priority === 'urgent' ? 'danger' : t.priority === 'high' ? 'warning' : 'default'}>{t.priority}</Badge>
+                  </div>
+                  <Link to={`/tasks/${t.id}`} className="block font-medium text-slate-900 dark:text-white hover:text-primary-600 line-clamp-2">{t.title}</Link>
+                  <div className="flex items-center justify-between">
+                    <Badge>{statusObj?.name || t.statusId}</Badge>
+                    <span className="text-xs text-slate-500">{t.dueDate || 'No due date'}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">{sprints.find(s => s.id === t.sprintId)?.name || 'No sprint'}</span>
+                    <div className="flex -space-x-1">{(t.assigneeIds || []).map(aid => { const u = assigneeMap.get(aid); return <Avatar key={aid} name={u?.name || aid} src={u?.avatar} size="sm" className="ring-2 ring-white" />; })}</div>
+                  </div>
+                </div>
+              );
+            })}
         </div>
-        <Select options={[{ value: '', label: 'All Teams' }, ...teamOptions]} value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="w-48" />
-        <Select options={[{ value: '', label: 'All Sprints' }, ...sprintOptions]} value={filterSprint} onChange={e => setFilterSprint(e.target.value)} className="w-48" />
-      </div>
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        {loading ? <div className="p-8 text-center text-sm text-slate-500">Loading tickets...</div> : (
-          <Table
+      ) : (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          {loading ? <div className="p-8 text-center text-sm text-slate-500">Loading tickets...</div> : (
+            <Table
             columns={[
               { key: 'ticketKey', header: 'Ticket', render: t => <span className="font-mono text-xs font-semibold text-primary-600">{t.ticketKey || t.id.slice(0, 8)}</span> },
               { key: 'title', header: 'Title', render: t => <Link to={`/tasks/${t.id}`} className="font-medium hover:text-primary-600">{t.title}</Link> },
@@ -178,8 +208,9 @@ export default function TicketListPage() {
             data={filtered}
             emptyMessage="No tickets found"
           />
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title="Create Ticket" size="lg">
         <div className="space-y-4">

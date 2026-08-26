@@ -10,6 +10,8 @@ import { Button } from '../../components/common/Button';
 import { Dropdown } from '../../components/common/Dropdown';
 import { Modal } from '../../components/common/Modal';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { DataToolbar } from '../../components/common/DataToolbar';
+import { ViewToggle, type ViewMode } from '../../components/common/ViewToggle';
 import { userService } from '../../services/userService';
 import { projectService } from '../../services/projectService';
 import { roleService } from '../../services/roleService';
@@ -36,6 +38,7 @@ export default function UserListPage() {
   const [viewingUser, setViewingUser] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   useEffect(() => {
     Promise.all([
@@ -297,62 +300,96 @@ export default function UserListPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Users</h1>
-        <Button
-          onClick={() => {
-            setEditingUser(null);
-            setModalOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Add User
-        </Button>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Users</h1>
+
+      <DataToolbar
+        search={
+          <SearchBox
+            value={search}
+            onChange={v => {
+              setSearch(v);
+              setCurrentPage(1);
+            }}
+            placeholder="Search users..."
+          />
+        }
+        filters={
+          <FilterPanel
+            filters={[
+              {
+                key: 'status',
+                label: 'Status',
+                options: [
+                  { value: 'active', label: 'Active' },
+                  { value: 'inactive', label: 'Inactive' },
+                ],
+              },
+            ]}
+            values={filterValues}
+            onChange={(key, value) => {
+              setFilterValues(prev => ({ ...prev, [key]: value }));
+              setCurrentPage(1);
+            }}
+            onClear={() => {
+              setFilterValues({});
+              setCurrentPage(1);
+            }}
+          />
+        }
+        actions={
+          <Button
+            onClick={() => {
+              setEditingUser(null);
+              setModalOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4" />
+            Add User
+          </Button>
+        }
+      />
+
+      <div className="flex justify-end">
+        <ViewToggle value={viewMode} onChange={setViewMode} />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <SearchBox
-          value={search}
-          onChange={v => {
-            setSearch(v);
-            setCurrentPage(1);
-          }}
-          placeholder="Search users..."
-          className="sm:w-72"
-        />
-        <FilterPanel
-          filters={[
-            {
-              key: 'status',
-              label: 'Status',
-              options: [
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
-              ],
-            },
-          ]}
-          values={filterValues}
-          onChange={(key, value) => {
-            setFilterValues(prev => ({ ...prev, [key]: value }));
-            setCurrentPage(1);
-          }}
-          onClear={() => {
-            setFilterValues({});
-            setCurrentPage(1);
-          }}
-        />
-      </div>
-
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
-        <Table
-          columns={columns}
-          data={paginated}
-          sortKey={sortKey}
-          sortDirection={sortDirection}
-          onSort={handleSort}
-          emptyMessage="No users found"
-        />
-      </div>
+      {viewMode === 'table' ? (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+          <Table
+            columns={columns}
+            data={paginated}
+            sortKey={sortKey}
+            sortDirection={sortDirection}
+            onSort={handleSort}
+            emptyMessage="No users found"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {paginated.length === 0 ? (
+            <div className="col-span-full py-12 text-center text-slate-500 dark:text-slate-400">No users found</div>
+          ) : (
+            paginated.map(u => (
+              <div key={u.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar src={u.avatar} name={u.name} size="sm" />
+                    <div>
+                      <p className="font-medium text-slate-900 dark:text-slate-100">{u.name}</p>
+                      <p className="text-xs text-slate-500">{u.email}</p>
+                    </div>
+                  </div>
+                  <Badge variant={u.status === 'active' ? 'success' : 'danger'}>{u.status === 'active' ? 'Active' : 'Inactive'}</Badge>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {u.roles.length === 0 ? <span className="text-slate-400 text-xs">No roles</span> : u.roles.map(r => <Badge key={r} variant="info">{r}</Badge>)}
+                </div>
+                <p className="text-xs text-slate-500">{u.projectCount} projects</p>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       <Pagination
         currentPage={currentPage}

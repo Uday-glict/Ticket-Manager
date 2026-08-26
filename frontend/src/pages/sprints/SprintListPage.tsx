@@ -8,6 +8,9 @@ import { Select } from '../../components/common/Select';
 import { DatePicker } from '../../components/common/DatePicker';
 import { Badge } from '../../components/common/Badge';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { SearchBox } from '../../components/common/SearchBox';
+import { DataToolbar } from '../../components/common/DataToolbar';
+import { ViewToggle, type ViewMode } from '../../components/common/ViewToggle';
 import { projectService } from '../../services/projectService';
 import { teamService } from '../../services/teamService';
 import { sprintService } from '../../services/sprintService';
@@ -29,6 +32,8 @@ export default function SprintListPage() {
   const [editing, setEditing] = useState<Sprint | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Sprint | null>(null);
   const [form, setForm] = useState({ name: '', goal: '', teamId: '', startDate: '', endDate: '' });
+  const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   useEffect(() => {
     projectService.list().then(res => {
@@ -88,41 +93,85 @@ export default function SprintListPage() {
   const teamOptions = teams.map(t => ({ value: t.id, label: t.name }));
   const teamName = (id?: string | null) => teams.find(t => t.id === id)?.name;
 
+  const filtered = sprints.filter(s => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return s.name.toLowerCase().includes(q) || (s.goal || '').toLowerCase().includes(q);
+  });
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Sprints</h1>
-          <p className="text-sm text-slate-500">Project: {project?.name || '—'}</p>
-        </div>
-        <div className="flex gap-3">
-          <Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => setProjectId(e.target.value)} className="w-56" />
-          <Button onClick={openCreate}><Plus className="h-4 w-4" />Create Sprint</Button>
-        </div>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Sprints</h1>
+      <p className="text-sm text-slate-500">Project: {project?.name || '—'}</p>
+
+      <DataToolbar
+        search={<SearchBox value={search} onChange={setSearch} placeholder="Search sprints..." />}
+        filters={<Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => setProjectId(e.target.value)} className="w-56" />}
+        actions={<Button onClick={openCreate}><Plus className="h-4 w-4" />Create Sprint</Button>}
+      />
+
+      <div className="flex justify-end">
+        <ViewToggle value={viewMode} onChange={setViewMode} options={['grid', 'table']} />
       </div>
 
       {loading ? <div className="py-20 text-center text-slate-400">Loading sprints...</div> :
-        sprints.length === 0 ? <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 py-12 text-center text-slate-400">No sprints found</div> :
-        <div className="grid gap-4">
-          {sprints.map(s => (
-            <div key={s.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">{s.name} <Badge variant={s.status === 'ACTIVE' ? 'info' : s.status === 'COMPLETED' ? 'success' : 'default'}>{s.status}</Badge></h3>
-                  <p className="text-sm text-slate-500 flex items-center gap-1"><Calendar className="h-3 w-3" />{s.startDate} → {s.endDate}{s.teamId ? ` • ${teamName(s.teamId)}` : ''}</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">{s.goal}</p>
-                </div>
-                <div className="flex gap-2">
-                  {s.status === 'PLANNED' && <Button size="sm" variant="outline" onClick={() => handleStart(s)}><Play className="h-4 w-4" />Start</Button>}
-                  {s.status === 'ACTIVE' && <Button size="sm" variant="outline" onClick={() => handleComplete(s)}><CheckCircle className="h-4 w-4" />Complete</Button>}
-                  <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(s)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+        filtered.length === 0 ? <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 py-12 text-center text-slate-400">No sprints found</div> :
+        viewMode === 'table' ? (
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-700">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Name</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Dates</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Status</th>
+                    <th className="w-32"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {filtered.map(s => (
+                    <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      <td className="px-4 py-3">
+                        <p className="font-medium text-slate-900 dark:text-white">{s.name}</p>
+                        <p className="text-xs text-slate-500">{s.goal || '—'}</p>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{s.startDate} → {s.endDate}{s.teamId ? ` • ${teamName(s.teamId)}` : ''}</td>
+                      <td className="px-4 py-3"><Badge variant={s.status === 'ACTIVE' ? 'info' : s.status === 'COMPLETED' ? 'success' : 'default'}>{s.status}</Badge></td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-1">
+                          {s.status === 'PLANNED' && <Button size="sm" variant="outline" onClick={() => handleStart(s)}><Play className="h-4 w-4" />Start</Button>}
+                          {s.status === 'ACTIVE' && <Button size="sm" variant="outline" onClick={() => handleComplete(s)}><CheckCircle className="h-4 w-4" />Complete</Button>}
+                          <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit className="h-4 w-4" /></Button>
+                          <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(s)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4">
+            {filtered.map(s => (
+              <div key={s.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="font-semibold text-slate-900 dark:text-white flex items-center gap-2">{s.name} <Badge variant={s.status === 'ACTIVE' ? 'info' : s.status === 'COMPLETED' ? 'success' : 'default'}>{s.status}</Badge></h3>
+                    <p className="text-sm text-slate-500 flex items-center gap-1"><Calendar className="h-3 w-3" />{s.startDate} → {s.endDate}{s.teamId ? ` • ${teamName(s.teamId)}` : ''}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400 mt-2">{s.goal}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    {s.status === 'PLANNED' && <Button size="sm" variant="outline" onClick={() => handleStart(s)}><Play className="h-4 w-4" />Start</Button>}
+                    {s.status === 'ACTIVE' && <Button size="sm" variant="outline" onClick={() => handleComplete(s)}><CheckCircle className="h-4 w-4" />Complete</Button>}
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(s)}><Edit className="h-4 w-4" /></Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleteTarget(s)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      }
+            ))}
+          </div>
+        )}
 
       <Modal isOpen={showCreate} onClose={() => setShowCreate(false)} title={editing ? 'Edit Sprint' : 'Create Sprint'}>
         <div className="space-y-4">

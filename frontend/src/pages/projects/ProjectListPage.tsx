@@ -9,6 +9,8 @@ import { SearchBox } from '../../components/common/SearchBox';
 import { Pagination } from '../../components/common/Pagination';
 import { FilterPanel } from '../../components/common/FilterPanel';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
+import { DataToolbar } from '../../components/common/DataToolbar';
+import { ViewToggle, type ViewMode } from '../../components/common/ViewToggle';
 import { projectService } from '../../services/projectService';
 import { taskService } from '../../services/taskService';
 import { useToast } from '../../context/ToastContext';
@@ -30,6 +32,7 @@ export default function ProjectListPage() {
   const [allTasks, setAllTasks] = useState<{ projectId: string; statusId: string; statusName: string }[]>([]);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   const fetchData = () => {
     setLoading(true);
@@ -243,50 +246,94 @@ export default function ProjectListPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Projects</h1>
-        <Link to="/projects/create">
-          <Button>
-            <Plus className="h-4 w-4" />
-            Create Project
-          </Button>
-        </Link>
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Projects</h1>
+
+      <DataToolbar
+        search={
+          <SearchBox
+            value={search}
+            onChange={v => { setSearch(v); setPage(1); }}
+            placeholder="Search projects..."
+          />
+        }
+        filters={
+          <FilterPanel
+            filters={[
+              {
+                key: 'status',
+                label: 'Status',
+                options: [
+                  { value: 'active', label: 'Active' },
+                  { value: 'archived', label: 'Archived' },
+                ],
+              },
+            ]}
+            values={filters}
+            onChange={(k, v) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); }}
+            onClear={() => { setFilters({}); setPage(1); }}
+          />
+        }
+        actions={
+          <Link to="/projects/create">
+            <Button>
+              <Plus className="h-4 w-4" />
+              Create Project
+            </Button>
+          </Link>
+        }
+      />
+
+      <div className="flex justify-end">
+        <ViewToggle value={viewMode} onChange={setViewMode} />
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <SearchBox
-          value={search}
-          onChange={v => { setSearch(v); setPage(1); }}
-          placeholder="Search projects..."
-          className="sm:w-80"
-        />
-        <FilterPanel
-          filters={[
-            {
-              key: 'status',
-              label: 'Status',
-              options: [
-                { value: 'active', label: 'Active' },
-                { value: 'archived', label: 'Archived' },
-              ],
-            },
-          ]}
-          values={filters}
-          onChange={(k, v) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); }}
-          onClear={() => { setFilters({}); setPage(1); }}
-        />
-      </div>
-
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-        <Table
-          columns={columns}
-          data={paginated}
-          sortKey={sortKey}
-          sortDirection={sortDir}
-          onSort={handleSort}
-          emptyMessage="No projects found"
-        />
-      </div>
+      {viewMode === 'table' ? (
+        <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <Table
+            columns={columns}
+            data={paginated}
+            sortKey={sortKey}
+            sortDirection={sortDir}
+            onSort={handleSort}
+            emptyMessage="No projects found"
+          />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {paginated.length === 0 ? (
+            <div className="col-span-full py-12 text-center text-slate-500 dark:text-slate-400">No projects found</div>
+          ) : (
+            paginated.map(p => (
+              <div key={p.id} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-3">
+                <div className="flex items-start justify-between">
+                  <Link to={`/projects/${p.id}`} className="font-semibold text-slate-900 dark:text-slate-100 hover:text-primary-500 transition-colors line-clamp-1">{p.name}</Link>
+                  <Badge variant={p.status === 'active' ? 'success' : 'default'}>{p.status === 'active' ? 'Active' : 'Archived'}</Badge>
+                </div>
+                <p className="text-sm text-slate-500 line-clamp-2">{p.description || 'No description'}</p>
+                <div className="flex -space-x-2">
+                  {p.members.slice(0, 4).map((m, i) => (
+                    <Avatar key={i} src="" name={m.userId} size="sm" className="ring-2 ring-white dark:ring-slate-900" />
+                  ))}
+                  {p.members.length > 4 && (
+                    <div className="h-8 w-8 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center text-xs font-medium ring-2 ring-white dark:ring-slate-900">+{p.members.length - 4}</div>
+                  )}
+                  <span className="ml-3 text-xs text-slate-500 flex items-center">{p.members.length} members</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 h-2 rounded-full bg-slate-200 dark:bg-slate-700">
+                    <div className="h-full rounded-full bg-primary-500 transition-all" style={{ width: `${getProgress(p)}%` }} />
+                  </div>
+                  <span className="text-xs text-slate-500 w-10 text-right">{getProgress(p)}%</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-500">
+                  <span>{p.startDate ? new Date(p.startDate).toLocaleDateString() : '—'} → {p.endDate ? new Date(p.endDate).toLocaleDateString() : '—'}</span>
+                  <span>{getTaskCount(p.id)} tasks</span>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
 
