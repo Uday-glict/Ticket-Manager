@@ -7,6 +7,7 @@ from pathlib import Path
 from contextlib import asynccontextmanager
 from app.api.v1.router import api_router
 from app.core.exceptions import AppException
+from app.core.config import settings
 from app.constants.messages import COMMON_MESSAGES
 from app.constants.error_codes import INTERNAL_SERVER_ERROR, VALIDATION_ERROR
 import logging
@@ -40,7 +41,8 @@ app = FastAPI(title="TaskManager API", version="1.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
