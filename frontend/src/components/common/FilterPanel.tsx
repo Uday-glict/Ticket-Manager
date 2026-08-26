@@ -48,7 +48,7 @@ export function FilterPanel({ filters, values, onChange, onClear, className }: F
               <select
                 value={values[filter.key] || ''}
                 onChange={e => onChange(filter.key, e.target.value)}
-                className="block w-40 px-2 py-1.5 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:ring-2 focus:ring-primary-500 cursor-pointer"
+                className="block w-40 h-8 px-2 text-sm border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
               >
                 <option value="">All</option>
                 {filter.options.map(opt => (
