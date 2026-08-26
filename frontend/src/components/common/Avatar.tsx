@@ -16,7 +16,10 @@ const sizes = {
 function resolveAvatarSrc(src?: string): string | undefined {
   if (!src) return undefined;
   if (src.startsWith('blob:') || src.startsWith('data:') || src.startsWith('http')) return src;
-  if (src.startsWith('/uploads/')) return `http://localhost:8000${src}`;
+  if (src.startsWith('/uploads/')) {
+    const base = (import.meta.env.VITE_API_BASE_URL as string || 'http://localhost:8000/api/v1').replace(/\/api\/v1\/?$/, '');
+    return `${base}${src}`;
+  }
   return src;
 }
 
