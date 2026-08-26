@@ -40,7 +40,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           applyUser(u);
         })
         .catch(() => {
-          localStorage.clear();
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          setUser(null);
+          setRole(null);
+          setPermissions([]);
         })
         .finally(() => setLoading(false));
     } else {

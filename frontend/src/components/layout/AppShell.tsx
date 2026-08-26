@@ -1,15 +1,27 @@
 import { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, Navigate } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { Breadcrumb } from './Breadcrumb';
-import { ToastContainer } from '../common/Toast';
+import { Loader } from '../common/Loader';
 import { useAuth } from '../../context/AuthContext';
 
 export function AppShell() {
   const [collapsed, setCollapsed] = useState(false);
-  const { user, logout } = useAuth();
+  const { user, logout, loading } = useAuth();
   const navigate = useNavigate();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
+        <Loader size="lg" message="Loading..." />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleLogout = () => {
     logout();
@@ -26,7 +38,6 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
-      <ToastContainer toasts={[]} onDismiss={() => {}} />
     </div>
   );
 }
