@@ -26,6 +26,18 @@ async def get_current_workspace_member(
     return member
 
 
+_PERM_ALIASES: dict[str, str] = {
+    "tickets.view": "tasks.view", "tasks.view": "tickets.view",
+    "tickets.create": "tasks.create", "tasks.create": "tickets.create",
+    "tickets.update": "tasks.update", "tasks.update": "tickets.update",
+    "tickets.delete": "tasks.delete", "tasks.delete": "tickets.delete",
+    "tickets.assign": "tasks.assign", "tasks.assign": "tickets.assign",
+}
+
+def _perm_matches(required: str, actual: str) -> bool:
+    return actual == required or _PERM_ALIASES.get(required) == actual
+
+
 def require_permission(permission: str):
     async def checker(
         workspace_member: WorkspaceMember = Depends(get_current_workspace_member),
@@ -33,8 +45,8 @@ def require_permission(permission: str):
     ) -> WorkspaceMember:
         if workspace_member.role in ("owner", "admin"):
             return workspace_member
-        if permission in ("projects.view", "tasks.view", "board.view", "projects.create"):
-            # allow any workspace member to view/create projects/tasks/board; data-level will filter
+        if permission in ("projects.view", "tasks.view", "tickets.view", "board.view"):
+            # allow any workspace member to view projects/tasks/tickets/board; data-level will filter; create/update/delete still requires explicit permission
             return workspace_member
         # check project-specific roles for permission
         result = await db.execute(select(ProjectMember).where(ProjectMember.user_id == workspace_member.user_id))
@@ -45,7 +57,7 @@ def require_permission(permission: str):
             for role in result.scalars().all():
                 await db.refresh(role, attribute_names=["permissions"])
                 for perm in role.permissions:
-                    if perm.name == permission:
+                    if _perm_matches(permission, perm.name):
                         return workspace_member
         # fallback check workspace roles (global)
         result = await db.execute(
@@ -54,7 +66,7 @@ def require_permission(permission: str):
         for role in result.scalars().all():
             await db.refresh(role, attribute_names=["permissions"])
             for perm in role.permissions:
-                if perm.name == permission:
+                if _perm_matches(permission, perm.name):
                     return workspace_member
         raise ForbiddenException(
             message=PERMISSION_MESSAGES["FORBIDDEN"],

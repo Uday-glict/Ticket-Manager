@@ -192,14 +192,20 @@ class AuthService:
                 permissions = Permissions.ALL
             elif member:
                 from app.models.role import Role
-                result = await self.db.execute(select(Role).where(Role.workspace_id == member.workspace_id))
-                roles = result.scalars().all()
-                perms_set = set()
-                for r in roles:
-                    await self.db.refresh(r, attribute_names=["permissions"])
-                    for p in r.permissions:
-                        perms_set.add(p.name)
-                permissions = list(perms_set)
+                from app.models.project_member import ProjectMember
+                pm_result = await self.db.execute(select(ProjectMember.role_id).where(ProjectMember.user_id == user_id))
+                role_ids = [row[0] for row in pm_result.all()]
+                if role_ids:
+                    result = await self.db.execute(select(Role).where(Role.id.in_(role_ids)))
+                    roles = result.scalars().all()
+                    perms_set = set()
+                    for r in roles:
+                        await self.db.refresh(r, attribute_names=["permissions"])
+                        for p in r.permissions:
+                            perms_set.add(p.name)
+                    permissions = list(perms_set)
+                else:
+                    permissions = []
         return {
             "id": user.id,
             "email": user.email,
