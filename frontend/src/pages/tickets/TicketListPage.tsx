@@ -18,6 +18,7 @@ import { projectService } from '../../services/projectService';
 import { teamService } from '../../services/teamService';
 import { sprintService } from '../../services/sprintService';
 import { userService } from '../../services/userService';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getErrorMessage } from '../../api/apiClient';
 import { mapProject, mapTask, mapTeam, mapSprint, mapUser } from '../../utils/mappers';
@@ -26,6 +27,7 @@ import type { Ticket, Team, Sprint, Project, User } from '../../types';
 export default function TicketListPage() {
   const { projectId: paramId } = useParams();
   const { success: showSuccess, error: showError } = useToast();
+  const { hasPermission } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState(paramId || '');
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -156,12 +158,12 @@ export default function TicketListPage() {
         search={<SearchBox value={search} onChange={setSearch} placeholder="Search tickets..." />}
         filters={
           <>
-            <Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => { setProjectId(e.target.value); setFilterTeam(''); setFilterSprint(''); }} className="w-48" />
-            <Select options={[{ value: '', label: 'All Teams' }, ...teamOptions]} value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="w-40" />
-            <Select options={[{ value: '', label: 'All Sprints' }, ...sprintOptions]} value={filterSprint} onChange={e => setFilterSprint(e.target.value)} className="w-40" />
+            <Select options={projects.map(p => ({ value: p.id, label: p.name }))} value={projectId} onChange={e => { setProjectId(e.target.value); setFilterTeam(''); setFilterSprint(''); }} className="w-44" />
+            <Select options={[{ value: '', label: 'All Teams' }, ...teamOptions]} value={filterTeam} onChange={e => setFilterTeam(e.target.value)} className="w-36" />
+            <Select options={[{ value: '', label: 'All Sprints' }, ...sprintOptions]} value={filterSprint} onChange={e => setFilterSprint(e.target.value)} className="w-36" />
           </>
         }
-        actions={<Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create Ticket</Button>}
+        actions={hasPermission('tickets.create') ? <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" />Create Ticket</Button> : undefined}
       />
 
       <div className="flex justify-end">

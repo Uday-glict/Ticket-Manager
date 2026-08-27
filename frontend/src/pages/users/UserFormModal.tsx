@@ -3,19 +3,17 @@ import { Eye, EyeOff } from 'lucide-react';
 import { Modal } from '../../components/common/Modal';
 import { Input } from '../../components/common/Input';
 import { Select } from '../../components/common/Select';
-import { MultiSelect } from '../../components/common/MultiSelect';
 import { Button } from '../../components/common/Button';
 import { Avatar } from '../../components/common/Avatar';
-import { projectService } from '../../services/projectService';
 import { roleService } from '../../services/roleService';
-import type { User, Project, Role } from '../../types';
-import { mapProject, mapRole } from '../../utils/mappers';
+import type { User, Role } from '../../types';
+import { mapRole } from '../../utils/mappers';
 
 interface UserFormModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: User | null;
-  onSave: (data: Partial<User> & { projectRoles?: Record<string, string>; avatarFile?: File | null; password?: string }) => void;
+  onSave: (data: Partial<User> & { roleId?: string; avatarFile?: File | null; password?: string }) => void;
 }
 
 export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFormModalProps) {
@@ -23,9 +21,7 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
-  const [projectRoles, setProjectRoles] = useState<Record<string, string>>({});
-  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedRoleId, setSelectedRoleId] = useState('');
   const [roles, setRoles] = useState<Role[]>([]);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -38,13 +34,9 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
 
   useEffect(() => {
     if (isOpen) {
-      Promise.all([
-        projectService.list(),
-        roleService.list(),
-      ]).then(([projectsRes, rolesRes]) => {
-        setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
-        setRoles((rolesRes.data.data || rolesRes.data || []).map(mapRole));
-      }).catch(() => {});
+      roleService.list()
+        .then(res => setRoles((res.data.data || res.data || []).map(mapRole)))
+        .catch(() => {});
     }
   }, [isOpen]);
 
@@ -55,18 +47,6 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
       setStatus(user.status);
       setAvatarPreview(user.avatar || null);
       setAvatarFile(null);
-      const userProjects = projects
-        .filter(p => p.members.some(m => m.userId === user.id))
-        .map(p => p.id);
-      setSelectedProjects(userProjects);
-      const roleMap: Record<string, string> = {};
-      projects.forEach(p => {
-        const member = p.members.find(m => m.userId === user.id);
-        if (member) {
-          roleMap[p.id] = member.roleId;
-        }
-      });
-      setProjectRoles(roleMap);
     } else {
       setName('');
       setEmail('');
@@ -76,28 +56,11 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
       setShowPassword(false);
       setShowConfirmPassword(false);
       setStatus('active');
-      setSelectedProjects([]);
-      setProjectRoles({});
+      setSelectedRoleId('');
       setAvatarFile(null);
       setAvatarPreview(null);
     }
-  }, [user, isOpen, projects]);
-
-  const handleProjectToggle = (projectIds: string[]) => {
-    setSelectedProjects(projectIds);
-    const newRoles = { ...projectRoles };
-    Object.keys(newRoles).forEach(k => {
-      if (!projectIds.includes(k)) delete newRoles[k];
-    });
-    projectIds.forEach(id => {
-      if (!newRoles[id]) newRoles[id] = roles[0]?.id ?? '';
-    });
-    setProjectRoles(newRoles);
-  };
-
-  const handleRoleChange = (projectId: string, roleId: string) => {
-    setProjectRoles(prev => ({ ...prev, [projectId]: roleId }));
-  };
+  }, [user, isOpen]);
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -120,14 +83,10 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
       email,
       password: !isEdit ? password : undefined,
       status,
-      projectRoles,
+      roleId: selectedRoleId || undefined,
       avatarFile,
     });
   };
-
-  const projectOptions = projects
-    .filter(p => p.status === 'active')
-    .map(p => ({ value: p.id, label: p.name }));
 
   const roleOptions = roles.map(r => ({ value: r.id, label: r.name }));
 
@@ -211,37 +170,17 @@ export default function UserFormModal({ isOpen, onClose, user, onSave }: UserFor
 
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-            Project Assignment
+            Role Assignment
           </h3>
-          <MultiSelect
-            options={projectOptions}
-            value={selectedProjects}
-            onChange={handleProjectToggle}
-            placeholder="Select projects..."
+          <p className="text-xs text-slate-500">Select a role to grant the user the associated permissions. The user will see only modules allowed by this role after login.</p>
+          <Select
+            label="Role"
+            value={selectedRoleId}
+            onChange={e => setSelectedRoleId(e.target.value)}
+            options={roleOptions}
+            placeholder="Select a role for this user"
           />
-
-          {selectedProjects.length > 0 && (
-            <div className="space-y-3">
-              <h4 className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                Role per Project
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {selectedProjects.map(projId => {
-                  const project = projects.find(p => p.id === projId);
-                  return (
-                    <Select
-                      key={projId}
-                      label={project?.name ?? projId}
-                      value={projectRoles[projId] ?? ''}
-                      onChange={e => handleRoleChange(projId, e.target.value)}
-                      options={roleOptions}
-                      placeholder="Select role"
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {roles.length === 0 && <p className="text-xs text-amber-600">No roles found. Create a role first in Role Management.</p>}
         </div>
 
         <div className="flex justify-end gap-3 pt-2 border-t border-slate-200 dark:border-slate-700">

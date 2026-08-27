@@ -17,10 +17,10 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
-  { label: 'Projects', path: '/projects', icon: <FolderKanban className="h-5 w-5" /> },
-  { label: 'Teams', path: '/teams', icon: <UsersRound className="h-5 w-5" /> },
-  { label: 'Sprints', path: '/sprints', icon: <Timer className="h-5 w-5" /> },
-  { label: 'Tickets', path: '/tickets', icon: <CheckSquare className="h-5 w-5" /> },
+  { label: 'Projects', path: '/projects', icon: <FolderKanban className="h-5 w-5" />, perm: 'projects.view' },
+  { label: 'Teams', path: '/teams', icon: <UsersRound className="h-5 w-5" />, perm: 'teams.view' },
+  { label: 'Sprints', path: '/sprints', icon: <Timer className="h-5 w-5" />, perm: 'sprints.view' },
+  { label: 'Tickets', path: '/tickets', icon: <CheckSquare className="h-5 w-5" />, perm: 'tickets.view' },
   { label: 'Board', path: '/board', icon: <Columns3 className="h-5 w-5" /> },
   { label: 'Calendar', path: '/calendar', icon: <Calendar className="h-5 w-5" /> },
   { label: 'Users', path: '/users', icon: <Users className="h-5 w-5" />, perm: 'users.manage' },

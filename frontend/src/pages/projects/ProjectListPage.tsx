@@ -7,12 +7,13 @@ import { Badge } from '../../components/common/Badge';
 import { Avatar } from '../../components/common/Avatar';
 import { SearchBox } from '../../components/common/SearchBox';
 import { Pagination } from '../../components/common/Pagination';
-import { FilterPanel } from '../../components/common/FilterPanel';
+import { Select } from '../../components/common/Select';
 import { ConfirmDialog } from '../../components/common/ConfirmDialog';
 import { DataToolbar } from '../../components/common/DataToolbar';
 import { ViewToggle, type ViewMode } from '../../components/common/ViewToggle';
 import { projectService } from '../../services/projectService';
 import { taskService } from '../../services/taskService';
+import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getErrorMessage } from '../../api/apiClient';
 import type { Project } from '../../types';
@@ -23,6 +24,7 @@ const PAGE_SIZE = 5;
 export default function ProjectListPage() {
   const navigate = useNavigate();
   const { success: showSuccess, error: showError } = useToast();
+  const { hasPermission } = useAuth();
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -232,13 +234,15 @@ export default function ProjectListPage() {
               <Eye className="h-4 w-4" />
             </Button>
           </Link>
-          <button
-            onClick={() => setDeleteTarget(p)}
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
-            title="Delete"
-          >
-            <Trash2 className="h-4 w-4 text-red-500" />
-          </button>
+          {hasPermission('projects.delete') && (
+            <button
+              onClick={() => setDeleteTarget(p)}
+              className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+              title="Delete"
+            >
+              <Trash2 className="h-4 w-4 text-red-500" />
+            </button>
+          )}
         </div>
       ),
     },
@@ -257,29 +261,23 @@ export default function ProjectListPage() {
           />
         }
         filters={
-          <FilterPanel
-            filters={[
-              {
-                key: 'status',
-                label: 'Status',
-                options: [
-                  { value: 'active', label: 'Active' },
-                  { value: 'archived', label: 'Archived' },
-                ],
-              },
-            ]}
-            values={filters}
-            onChange={(k, v) => { setFilters(f => ({ ...f, [k]: v })); setPage(1); }}
-            onClear={() => { setFilters({}); setPage(1); }}
+          <Select
+            options={[{ value: '', label: 'All Status' }, { value: 'active', label: 'Active' }, { value: 'archived', label: 'Archived' }]}
+            value={filters.status || ''}
+            onChange={e => { setFilters(f => ({ ...f, status: e.target.value })); setPage(1); }}
+            placeholder="All Status"
+            className="w-40"
           />
         }
         actions={
-          <Link to="/projects/create">
-            <Button>
-              <Plus className="h-4 w-4" />
-              Create Project
-            </Button>
-          </Link>
+          hasPermission('projects.create') ? (
+            <Link to="/projects/create">
+              <Button>
+                <Plus className="h-4 w-4" />
+                Create Project
+              </Button>
+            </Link>
+          ) : undefined
         }
       />
 

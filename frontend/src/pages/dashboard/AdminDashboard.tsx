@@ -67,15 +67,15 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     Promise.all([
-      taskService.list(),
-      projectService.list(),
-      userService.list(),
-      auditService.list(),
+      taskService.list().catch(() => ({ data: { data: [] } })),
+      projectService.list().catch(() => ({ data: { data: [] } })),
+      userService.list().catch(() => ({ data: { data: [] } })),
+      auditService.list().catch(() => ({ data: { data: [] } })),
     ]).then(([tasksRes, projectsRes, usersRes, auditRes]) => {
-      setTasks((tasksRes.data.data || tasksRes.data || []).map(mapTask));
-      setProjects((projectsRes.data.data || projectsRes.data || []).map(mapProject));
-      setUsers((usersRes.data.data || usersRes.data || []).map(mapUser));
-      setActivities((auditRes.data.data || auditRes.data || []).map(mapAuditLog));
+      setTasks(((tasksRes as any).data.data || (tasksRes as any).data || []).map(mapTask));
+      setProjects(((projectsRes as any).data.data || (projectsRes as any).data || []).map(mapProject));
+      setUsers(((usersRes as any).data.data || (usersRes as any).data || []).map(mapUser));
+      setActivities(((auditRes as any).data.data || (auditRes as any).data || []).map(mapAuditLog));
     }).finally(() => setLoading(false));
   }, []);
 

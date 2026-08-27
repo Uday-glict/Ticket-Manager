@@ -280,7 +280,9 @@ function CommentItem({
 export default function TaskDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, hasPermission } = useAuth();
+  const canUpdate = hasPermission('tickets.update');
+  const canDelete = hasPermission('tickets.delete');
 
   const [task, setTask] = useState<Task | null>(null);
   const [project, setProject] = useState<Project | undefined>();
@@ -473,25 +475,25 @@ export default function TaskDetailPage() {
             </button>
           }
           items={[
-            {
+            ...(canUpdate ? [{
               label: 'Reassign',
               icon: <UserPlus className="h-4 w-4" />,
               onClick: () => {
                 setReassignUserId(task.assignedTo || '');
                 setShowReassignModal(true);
               },
-            },
-            ...priorityOptions.map(p => ({
+            }] : []),
+            ...(canUpdate ? priorityOptions.map(p => ({
               label: `Priority: ${p.label}`,
               icon: <Tag className="h-4 w-4" />,
               onClick: () => handlePriorityChange(p.value),
-            })),
-            {
+            })) : []),
+            ...(canDelete ? [{
               label: 'Delete',
               icon: <Trash2 className="h-4 w-4" />,
               danger: true,
               onClick: () => setShowDeleteConfirm(true),
-            },
+            }] : []),
           ]}
         />
       </div>
@@ -663,28 +665,28 @@ export default function TaskDetailPage() {
             <div>
               <label className="text-sm text-slate-500 dark:text-slate-400">Status</label>
               <div className="mt-1">
-                <Select options={statusOptions} value={task.statusId} onChange={e => handleStatusChange(e.target.value)} />
+                {canUpdate ? <Select options={statusOptions} value={task.statusId} onChange={e => handleStatusChange(e.target.value)} /> : <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{statusOptions.find(s => s.value === task.statusId)?.label ?? task.statusId}</p>}
               </div>
             </div>
 
             <div>
               <label className="text-sm text-slate-500 dark:text-slate-400">Priority</label>
               <div className="mt-1">
-                <Select options={priorityOptions} value={task.priority} onChange={e => handlePriorityChange(e.target.value)} />
+                {canUpdate ? <Select options={priorityOptions} value={task.priority} onChange={e => handlePriorityChange(e.target.value)} /> : <p className="mt-1 text-sm capitalize text-slate-700 dark:text-slate-300">{task.priority}</p>}
               </div>
             </div>
 
             <div>
               <label className="text-sm text-slate-500 dark:text-slate-400">Start Date</label>
               <div className="mt-1">
-                <DatePicker value={task.startDate ? task.startDate.split('T')[0] : undefined} onChange={handleStartDateChange} />
+                {canUpdate ? <DatePicker value={task.startDate ? task.startDate.split('T')[0] : undefined} onChange={handleStartDateChange} /> : <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{task.startDate ? formatDate(task.startDate) : '—'}</p>}
               </div>
             </div>
 
             <div>
               <label className="text-sm text-slate-500 dark:text-slate-400">Due Date</label>
               <div className="mt-1">
-                <DatePicker value={task.dueDate ? task.dueDate.split('T')[0] : undefined} onChange={handleDueDateChange} />
+                {canUpdate ? <DatePicker value={task.dueDate ? task.dueDate.split('T')[0] : undefined} onChange={handleDueDateChange} /> : <p className="mt-1 text-sm text-slate-700 dark:text-slate-300">{task.dueDate ? formatDate(task.dueDate) : '—'}</p>}
               </div>
             </div>
 

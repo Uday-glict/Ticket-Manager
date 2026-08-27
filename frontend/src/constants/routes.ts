@@ -13,7 +13,7 @@ export const ROUTES = {
   USERS: '/users',
   ROLES: '/roles',
   ROLE_CREATE: '/roles/create',
-  ROLE_EDIT: '/roles/:id',
+  ROLE_EDIT: '/roles/:id/edit',
   SETTINGS: '/settings',
   PROFILE: '/settings/profile',
   AUDIT_LOG: '/settings/audit',

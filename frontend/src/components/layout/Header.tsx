@@ -26,9 +26,8 @@ export function Header({ userName = 'User', onLogout, className }: HeaderProps) 
         >
           {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
-        <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer">
+        <button className="relative p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer" title="Notifications">
           <Bell className="h-5 w-5" />
-          <Badge variant="danger" className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-[10px]">3</Badge>
         </button>
         <Dropdown
           trigger={<Avatar name={userName} size="sm" className="cursor-pointer" />}

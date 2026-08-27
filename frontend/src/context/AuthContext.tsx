@@ -13,6 +13,7 @@ interface AuthContextType {
   logout: () => void;
   isAuthenticated: boolean;
   loading: boolean;
+  validate: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -31,25 +32,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole({ id: '1', name: isAdmin ? 'Admin' : 'Member', description: isAdmin ? 'Full access' : 'Limited', permissions: perms, isSystem: true, createdAt: new Date().toISOString() });
   };
 
-  useEffect(() => {
+  const validate = async () => {
     const token = localStorage.getItem('access_token');
-    if (token) {
-      authService.getMe()
-        .then((res) => {
-          const u = res.data.data || res.data;
-          applyUser(u);
-        })
-        .catch(() => {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          setUser(null);
-          setRole(null);
-          setPermissions([]);
-        })
-        .finally(() => setLoading(false));
-    } else {
+    if (!token) {
+      setUser(null);
+      setRole(null);
+      setPermissions([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      const res = await authService.getMe();
+      const u = res.data.data || res.data;
+      applyUser(u);
+    } catch {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setUser(null);
+      setRole(null);
+      setPermissions([]);
+    } finally {
       setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    validate();
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -104,10 +112,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissions([]);
   };
 
-  const hasPermission = (perm: string) => permissions.includes(perm) || user?.email?.includes('admin') || false;
+  const hasPermission = (perm: string) => {
+    if (permissions.includes(perm)) return true;
+    const aliases: Record<string, string> = {
+      'tickets.view': 'tasks.view', 'tasks.view': 'tickets.view',
+      'tickets.create': 'tasks.create', 'tasks.create': 'tickets.create',
+      'tickets.update': 'tasks.update', 'tasks.update': 'tickets.update',
+      'tickets.delete': 'tasks.delete', 'tasks.delete': 'tickets.delete',
+      'tickets.assign': 'tasks.assign', 'tasks.assign': 'tickets.assign',
+    };
+    if (aliases[perm] && permissions.includes(aliases[perm])) return true;
+    if (user?.email?.includes('admin')) return true;
+    return false;
+  };
 
   return (
-    <AuthContext.Provider value={{ user, role, permissions, hasPermission, login, signup, logout, isAuthenticated: !!user, loading }}>
+    <AuthContext.Provider value={{ user, role, permissions, hasPermission, login, signup, logout, isAuthenticated: !!user, loading, validate }}>
       {children}
     </AuthContext.Provider>
   );

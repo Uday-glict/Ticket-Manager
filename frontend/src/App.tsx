@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { AppShell } from './components/layout/AppShell';
+import { ProtectedRoute, PublicRoute } from './components/Guards';
 import { ROUTES } from './constants/routes';
 
 import LoginPage from './pages/auth/LoginPage';
@@ -32,10 +33,11 @@ function App() {
       <AuthProvider>
         <BrowserRouter>
           <Routes>
-            <Route path={ROUTES.LOGIN} element={<LoginPage />} />
-            <Route path={ROUTES.SIGNUP} element={<SignupPage />} />
+            <Route path={ROUTES.LOGIN} element={<PublicRoute><LoginPage /></PublicRoute>} />
+            <Route path={ROUTES.SIGNUP} element={<PublicRoute><SignupPage /></PublicRoute>} />
             <Route path={ROUTES.ONBOARDING} element={<OnboardingPage />} />
-            <Route element={<AppShell />}>
+            <Route path="/" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
+            <Route element={<ProtectedRoute><AppShell /></ProtectedRoute>}>
               <Route path={ROUTES.DASHBOARD} element={<AdminDashboard />} />
               <Route path={ROUTES.USERS} element={<UserListPage />} />
               <Route path={ROUTES.ROLES} element={<RoleListPage />} />

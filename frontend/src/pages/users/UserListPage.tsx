@@ -3,7 +3,7 @@ import { Plus, Edit, UserCheck, UserX, MoreVertical, Eye, Trash2 } from 'lucide-
 import { Table, type Column } from '../../components/common/Table';
 import { Pagination } from '../../components/common/Pagination';
 import { SearchBox } from '../../components/common/SearchBox';
-import { FilterPanel } from '../../components/common/FilterPanel';
+import { Select } from '../../components/common/Select';
 import { Badge } from '../../components/common/Badge';
 import { Avatar } from '../../components/common/Avatar';
 import { Button } from '../../components/common/Button';
@@ -147,7 +147,7 @@ export default function UserListPage() {
     }
   };
 
-  const handleSave = async (userData: Partial<User> & { projectRoles?: Record<string, string>; avatarFile?: File | null; password?: string }) => {
+  const handleSave = async (userData: Partial<User> & { roleId?: string; avatarFile?: File | null; password?: string }) => {
     try {
       if (editingUser) {
         const res = await userService.update(editingUser.id, { name: userData.name, email: userData.email, status: userData.status });
@@ -166,10 +166,10 @@ export default function UserListPage() {
           prev.map(u => (u.id === editingUser.id ? { ...u, name: updated.name || userData.name!, email: updated.email || userData.email!, status: updated.status || userData.status!, avatar: avatarUrl } : u))
         );
         showSuccess(res.data.message || 'User updated successfully');
-        if (userData.projectRoles) {
-          for (const [projId, roleId] of Object.entries(userData.projectRoles)) {
-            try { await projectService.addMember(projId, { user_id: editingUser.id, role_id: roleId }); } catch {}
-          }
+        const roleId = (userData as any).roleId;
+        if (roleId && projects.length > 0) {
+          const targetProject = projects[0].id;
+          try { await projectService.addMember(targetProject, { user_id: editingUser.id, role_id: roleId }); } catch {}
         }
       } else {
         const fd = new FormData();
@@ -189,10 +189,10 @@ export default function UserListPage() {
         };
         setUsers(prev => [...prev, newUser]);
         showSuccess(res.data.message || 'User created successfully');
-        if (userData.projectRoles) {
-          for (const [projId, roleId] of Object.entries(userData.projectRoles)) {
-            try { await projectService.addMember(projId, { user_id: newUser.id, role_id: roleId }); } catch {}
-          }
+        const roleId = (userData as any).roleId;
+        if (roleId && projects.length > 0) {
+          const targetProject = projects[0].id;
+          try { await projectService.addMember(targetProject, { user_id: newUser.id, role_id: roleId }); } catch {}
         }
       }
     } catch (err: any) {
@@ -314,26 +314,12 @@ export default function UserListPage() {
           />
         }
         filters={
-          <FilterPanel
-            filters={[
-              {
-                key: 'status',
-                label: 'Status',
-                options: [
-                  { value: 'active', label: 'Active' },
-                  { value: 'inactive', label: 'Inactive' },
-                ],
-              },
-            ]}
-            values={filterValues}
-            onChange={(key, value) => {
-              setFilterValues(prev => ({ ...prev, [key]: value }));
-              setCurrentPage(1);
-            }}
-            onClear={() => {
-              setFilterValues({});
-              setCurrentPage(1);
-            }}
+          <Select
+            options={[{ value: '', label: 'All Status' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]}
+            value={filterValues.status || ''}
+            onChange={e => { setFilterValues(prev => ({ ...prev, status: e.target.value })); setCurrentPage(1); }}
+            placeholder="All Status"
+            className="w-40"
           />
         }
         actions={
